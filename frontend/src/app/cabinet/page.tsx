@@ -16,6 +16,25 @@ type Service = {
   name: string;
   price: number;
   duration: number;
+  description?: string | null;
+};
+
+type ServiceUnit = "minutes" | "hours" | "days";
+
+type LocalService = {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
+  description?: string | null;
+};
+
+type ServiceDraft = {
+  name: string;
+  price: string;
+  durationValue: string;
+  durationUnit: ServiceUnit;
+  description: string;
 };
 
 type Booking = {
@@ -72,16 +91,6 @@ const bookingStatusLabel = (status: Booking["status"]) =>
 
 const masterAvatar = (master: MasterProfile | null) => master?.avatarUrl ?? master?.photos[0]?.url ?? null;
 
-const parseServices = (input: string) =>
-  input
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((row) => {
-      const [name, price, duration, description] = row.split("|").map((part) => part.trim());
-      return { name, price: Number(price), duration: Number(duration), description: description || undefined };
-    });
-
 const parsePhotos = (input: string) =>
   input
     .split("\n")
@@ -91,6 +100,57 @@ const parsePhotos = (input: string) =>
       const [url, alt] = row.split("|").map((part) => part.trim());
       return { url, alt: alt || undefined };
     });
+
+const createEmptyServiceDraft = (): ServiceDraft => ({
+  name: "",
+  price: "",
+  durationValue: "",
+  durationUnit: "minutes",
+  description: "",
+});
+
+const convertDraftDurationToMinutes = (value: string, unit: ServiceUnit) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return 0;
+  }
+
+  if (unit === "days") {
+    return numericValue * 24 * 60;
+  }
+
+  if (unit === "hours") {
+    return numericValue * 60;
+  }
+
+  return numericValue;
+};
+
+const convertMinutesToDraft = (minutes: number): Pick<ServiceDraft, "durationValue" | "durationUnit"> => {
+  if (minutes > 0 && minutes % (24 * 60) === 0) {
+    return { durationValue: String(minutes / (24 * 60)), durationUnit: "days" };
+  }
+
+  if (minutes > 0 && minutes % 60 === 0) {
+    return { durationValue: String(minutes / 60), durationUnit: "hours" };
+  }
+
+  return { durationValue: String(minutes), durationUnit: "minutes" };
+};
+
+const formatServiceDuration = (minutes: number) => {
+  if (minutes > 0 && minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`;
+  }
+
+  if (minutes > 0 && minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} ${hours === 1 ? "час" : hours < 5 ? "часа" : "часов"}`;
+  }
+
+  return `${minutes} мин`;
+};
 
 export default function CabinetPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -107,6 +167,9 @@ export default function CabinetPage() {
   const [masterTab, setMasterTab] = useState<"overview" | "services" | "stats">("overview");
   const [masterEditing, setMasterEditing] = useState(false);
   const [masterSaving, setMasterSaving] = useState(false);
+  const [masterServices, setMasterServices] = useState<LocalService[]>([]);
+  const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(createEmptyServiceDraft());
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [masterForm, setMasterForm] = useState({
     name: "",
     description: "",
@@ -114,7 +177,6 @@ export default function CabinetPage() {
     priceMin: "",
     priceMax: "",
     photos: "",
-    services: "",
   });
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -125,7 +187,6 @@ export default function CabinetPage() {
   const [clientRateComment, setClientRateComment] = useState("");
   const [clientRateSaving, setClientRateSaving] = useState(false);
 
-  const serviceExample = useMemo(() => "Стрижка|1500|60|Мужская стрижка\nБритье|900|30|Опасная бритва", []);
   const photoExample = useMemo(() => "https://example.com/photo-1.jpg|Фото профиля\nhttps://example.com/photo-2.jpg|Рабочее место", []);
   useEffect(() => {
     window.Telegram?.WebApp?.ready();
@@ -179,8 +240,16 @@ export default function CabinetPage() {
                 priceMin: data.priceMin?.toString() ?? "",
                 priceMax: data.priceMax?.toString() ?? "",
                 photos: data.photos.map((photo) => [photo.url, photo.alt ?? ""].join("|")).join("\n"),
-                services: data.services.map((service) => [service.name, service.price, service.duration, ""].join("|")).join("\n"),
               });
+              setMasterServices(
+                data.services.map((service) => ({
+                  id: service.id,
+                  name: service.name,
+                  price: service.price,
+                  duration: service.duration,
+                  description: service.description ?? "",
+                })),
+              );
             }
           }
         }
@@ -243,8 +312,7 @@ export default function CabinetPage() {
     }
   }
 
-  async function saveMaster(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function persistMasterProfile() {
     if (!authToken) return;
     setMasterSaving(true);
     setMessage(null);
@@ -260,13 +328,27 @@ export default function CabinetPage() {
           priceMin: masterForm.priceMin ? Number(masterForm.priceMin) : undefined,
           priceMax: masterForm.priceMax ? Number(masterForm.priceMax) : undefined,
           photos: parsePhotos(masterForm.photos),
-          services: parseServices(masterForm.services),
+          services: masterServices.map((service) => ({
+            name: service.name,
+            price: service.price,
+            duration: service.duration,
+            description: service.description || undefined,
+          })),
         }),
       });
       const data = (await res.json()) as MasterProfile & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить профиль мастера");
       setMaster(data);
       setBookings(data.bookings ?? bookings);
+      setMasterServices(
+        data.services.map((service) => ({
+          id: service.id,
+          name: service.name,
+          price: service.price,
+          duration: service.duration,
+          description: service.description ?? "",
+        })),
+      );
       setMasterEditing(false);
       setMessage(masterTab === "services" ? "Услуги обновлены." : "Профиль мастера обновлен.");
     } catch (saveError) {
@@ -274,6 +356,11 @@ export default function CabinetPage() {
     } finally {
       setMasterSaving(false);
     }
+  }
+
+  async function saveMaster(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await persistMasterProfile();
   }
   async function updateStatus(bookingId: string, status: "CONFIRMED" | "CANCELLED" | "COMPLETED") {
     if (!authToken) return;
@@ -317,6 +404,73 @@ export default function CabinetPage() {
     } finally {
       setClientRateSaving(false);
     }
+  }
+
+  function resetServiceEditor() {
+    setServiceDraft(createEmptyServiceDraft());
+    setEditingServiceId(null);
+  }
+
+  function editService(service: LocalService) {
+    const duration = convertMinutesToDraft(service.duration);
+    setServiceDraft({
+      name: service.name,
+      price: String(service.price),
+      durationValue: duration.durationValue,
+      durationUnit: duration.durationUnit,
+      description: service.description ?? "",
+    });
+    setEditingServiceId(service.id);
+  }
+
+  function removeService(serviceId: string) {
+    setMasterServices((current) => current.filter((service) => service.id !== serviceId));
+    if (editingServiceId === serviceId) {
+      resetServiceEditor();
+    }
+  }
+
+  function submitServiceDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const duration = convertDraftDurationToMinutes(serviceDraft.durationValue, serviceDraft.durationUnit);
+    const price = Number(serviceDraft.price);
+
+    if (!serviceDraft.name.trim()) {
+      setError("Укажите название услуги");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("Укажите корректную цену услуги");
+      return;
+    }
+
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setError("Укажите корректную длительность услуги");
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+
+    const normalizedService: LocalService = {
+      id: editingServiceId ?? `service-${Date.now()}`,
+      name: serviceDraft.name.trim(),
+      price,
+      duration,
+      description: serviceDraft.description.trim() || "",
+    };
+
+    setMasterServices((current) => {
+      if (editingServiceId) {
+        return current.map((service) => (service.id === editingServiceId ? normalizedService : service));
+      }
+
+      return [...current, normalizedService];
+    });
+
+    resetServiceEditor();
   }
 
   async function submitReview() {
@@ -519,16 +673,105 @@ export default function CabinetPage() {
 
             {masterTab === "services" ? (
               <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
-                <div className="flex items-center justify-between gap-4"><div><p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Услуги</p><h2 className="mt-3 text-2xl font-semibold">Управление услугами</h2></div><span className="rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs text-[var(--muted)]">{master?.services.length ?? 0} услуг</span></div>
-                <form className="mt-6 space-y-4" onSubmit={saveMaster}>
-                  <textarea value={masterForm.services} onChange={(event) => setMasterForm((current) => ({ ...current, services: event.target.value }))} placeholder={serviceExample} className="min-h-40 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
-                  <p className="text-sm text-[var(--muted)]">Одна услуга на строку: Название|Цена|Длительность|Описание</p>
-                  <button type="submit" disabled={masterSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">{masterSaving ? "Сохраняю..." : "Сохранить услуги"}</button>
+                <div className="flex items-center justify-between gap-4"><div><p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Услуги</p><h2 className="mt-3 text-2xl font-semibold">Управление услугами</h2></div><span className="rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs text-[var(--muted)]">{masterServices.length} услуг</span></div>
+                <form className="mt-6 grid gap-4 rounded-[28px] border border-[var(--line)] bg-white/80 p-5" onSubmit={submitServiceDraft}>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2">
+                      <span className="text-sm text-[var(--muted)]">Название услуги</span>
+                      <input
+                        value={serviceDraft.name}
+                        onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))}
+                        placeholder="Например, Классический массаж"
+                        className="rounded-2xl border border-[var(--line)] bg-white px-4 py-3 outline-none"
+                      />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className="text-sm text-[var(--muted)]">Цена</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={serviceDraft.price}
+                        onChange={(event) => setServiceDraft((current) => ({ ...current, price: event.target.value }))}
+                        placeholder="1500"
+                        className="rounded-2xl border border-[var(--line)] bg-white px-4 py-3 outline-none"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+                    <label className="grid gap-2">
+                      <span className="text-sm text-[var(--muted)]">Длительность</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={serviceDraft.durationValue}
+                        onChange={(event) => setServiceDraft((current) => ({ ...current, durationValue: event.target.value }))}
+                        placeholder="60"
+                        className="rounded-2xl border border-[var(--line)] bg-white px-4 py-3 outline-none"
+                      />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className="text-sm text-[var(--muted)]">Единица</span>
+                      <select
+                        value={serviceDraft.durationUnit}
+                        onChange={(event) => setServiceDraft((current) => ({ ...current, durationUnit: event.target.value as ServiceUnit }))}
+                        className="rounded-2xl border border-[var(--line)] bg-white px-4 py-3 outline-none"
+                      >
+                        <option value="minutes">Минуты</option>
+                        <option value="hours">Часы</option>
+                        <option value="days">Дни</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-[var(--muted)]">Описание услуги</span>
+                    <textarea
+                      value={serviceDraft.description}
+                      onChange={(event) => setServiceDraft((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="Коротко опишите, что входит в услугу"
+                      className="min-h-24 rounded-2xl border border-[var(--line)] bg-white px-4 py-3 outline-none"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    <button type="submit" className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white">
+                      {editingServiceId ? "Сохранить изменения" : "Добавить услугу"}
+                    </button>
+                    {editingServiceId ? (
+                      <button type="button" onClick={resetServiceEditor} className="rounded-full border border-[var(--line)] bg-white px-5 py-3 text-sm">
+                        Отменить редактирование
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={persistMasterProfile} disabled={masterSaving} className="rounded-full border border-[var(--line)] bg-white px-5 py-3 text-sm disabled:opacity-60">
+                      {masterSaving ? "Сохраняю..." : "Сохранить услуги в профиле"}
+                    </button>
+                  </div>
                 </form>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  {(master?.services ?? []).map((service) => (
-                    <article key={service.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-5"><div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">{service.name}</h3><span className="text-sm text-[var(--muted)]">{service.duration} мин</span></div><p className="mt-3 text-sm text-[var(--muted)]">{service.price} ₽</p></article>
-                  ))}
+                  {masterServices.length === 0 ? (
+                    <article className="rounded-3xl border border-dashed border-[var(--line)] bg-white/75 p-5 text-sm text-[var(--muted)]">
+                      Пока нет ни одной услуги. Добавьте первую через форму выше.
+                    </article>
+                  ) : (
+                    masterServices.map((service) => (
+                      <article key={service.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold">{service.name}</h3>
+                            <p className="mt-2 text-sm text-[var(--muted)]">{service.price.toLocaleString("ru-RU")} ₽</p>
+                            <p className="mt-1 text-sm text-[var(--muted)]">{formatServiceDuration(service.duration)}</p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <button type="button" onClick={() => editService(service)} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm">
+                              Редактировать
+                            </button>
+                            <button type="button" onClick={() => removeService(service.id)} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm text-red-600">
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                        {service.description ? <p className="mt-4 text-sm leading-6 text-[var(--muted)]">{service.description}</p> : null}
+                      </article>
+                    ))
+                  )}
                 </div>
               </section>
             ) : null}
