@@ -27,6 +27,24 @@ type CreateMasterInput = {
   }>;
 };
 
+type UpsertOwnMasterInput = {
+  name: string;
+  description?: string;
+  category: string;
+  priceMin?: number;
+  priceMax?: number;
+  services?: Array<{
+    name: string;
+    description?: string;
+    price: number;
+    duration: number;
+  }>;
+  photos?: Array<{
+    url: string;
+    alt?: string;
+  }>;
+};
+
 @Injectable()
 export class MastersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -84,6 +102,27 @@ export class MastersService {
         reviews: {
           orderBy: { createdAt: 'desc' },
           take: 10,
+        },
+      },
+    });
+  }
+
+  async findMine(userId: string) {
+    return this.prisma.master.findUnique({
+      where: { userId },
+      include: {
+        services: {
+          orderBy: { createdAt: 'asc' },
+        },
+        photos: {
+          orderBy: { createdAt: 'asc' },
+        },
+        bookings: {
+          orderBy: { date: 'desc' },
+          include: {
+            client: true,
+            service: true,
+          },
         },
       },
     });
@@ -153,6 +192,117 @@ export class MastersService {
             orderBy: { createdAt: 'asc' },
           },
           user: true,
+        },
+      });
+    });
+  }
+
+  async upsertMine(userId: string, input: UpsertOwnMasterInput) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingMaster = await tx.master.findUnique({
+        where: { userId },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { role: 'MASTER' },
+      });
+
+      if (existingMaster) {
+        await tx.service.deleteMany({
+          where: { masterId: existingMaster.id },
+        });
+
+        await tx.photo.deleteMany({
+          where: { masterId: existingMaster.id },
+        });
+
+        return tx.master.update({
+          where: { id: existingMaster.id },
+          data: {
+            name: input.name,
+            description: input.description,
+            category: input.category,
+            priceMin: input.priceMin,
+            priceMax: input.priceMax,
+            services: input.services?.length
+              ? {
+                  create: input.services.map((service) => ({
+                    name: service.name,
+                    description: service.description,
+                    price: service.price,
+                    duration: service.duration,
+                  })),
+                }
+              : undefined,
+            photos: input.photos?.length
+              ? {
+                  create: input.photos.map((photo) => ({
+                    url: photo.url,
+                    alt: photo.alt,
+                  })),
+                }
+              : undefined,
+          },
+          include: {
+            services: {
+              orderBy: { createdAt: 'asc' },
+            },
+            photos: {
+              orderBy: { createdAt: 'asc' },
+            },
+            bookings: {
+              orderBy: { date: 'desc' },
+              include: {
+                client: true,
+                service: true,
+              },
+            },
+          },
+        });
+      }
+
+      return tx.master.create({
+        data: {
+          userId,
+          name: input.name,
+          description: input.description,
+          category: input.category,
+          priceMin: input.priceMin,
+          priceMax: input.priceMax,
+          services: input.services?.length
+            ? {
+                create: input.services.map((service) => ({
+                  name: service.name,
+                  description: service.description,
+                  price: service.price,
+                  duration: service.duration,
+                })),
+              }
+            : undefined,
+          photos: input.photos?.length
+            ? {
+                create: input.photos.map((photo) => ({
+                  url: photo.url,
+                  alt: photo.alt,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          services: {
+            orderBy: { createdAt: 'asc' },
+          },
+          photos: {
+            orderBy: { createdAt: 'asc' },
+          },
+          bookings: {
+            orderBy: { date: 'desc' },
+            include: {
+              client: true,
+              service: true,
+            },
+          },
         },
       });
     });

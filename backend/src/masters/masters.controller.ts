@@ -7,9 +7,12 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
+  Request,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { Transform } from 'class-transformer';
@@ -24,6 +27,7 @@ import {
 } from 'class-validator';
 import { ConfigService } from '@nestjs/config';
 import { MastersService } from './masters.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 class GetMastersQueryDto {
   @IsOptional()
@@ -113,6 +117,42 @@ class CreateMasterDto {
   photos?: CreateMasterPhotoDto[];
 }
 
+class UpdateOwnMasterDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  category!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : Number(value)))
+  @IsNumber()
+  priceMin?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : Number(value)))
+  @IsNumber()
+  priceMax?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateMasterServiceDto)
+  services?: CreateMasterServiceDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateMasterPhotoDto)
+  photos?: CreateMasterPhotoDto[];
+}
+
 @Controller('masters')
 export class MastersController {
   constructor(
@@ -123,6 +163,12 @@ export class MastersController {
   @Get()
   getMasters(@Query() query: GetMastersQueryDto) {
     return this.mastersService.findAll(query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMyMasterProfile(@Request() req) {
+    return this.mastersService.findMine(req.user.userId);
   }
 
   @Post()
@@ -148,6 +194,12 @@ export class MastersController {
 
       throw error;
     }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateMyMasterProfile(@Request() req, @Body() body: UpdateOwnMasterDto) {
+    return this.mastersService.upsertMine(req.user.userId, body);
   }
 
   @Get(':id')
