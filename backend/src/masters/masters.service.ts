@@ -9,7 +9,7 @@ type MastersFilters = {
 };
 
 type CreateMasterInput = {
-  telegramId: string;
+  username: string;
   name: string;
   description?: string;
   category: string;
@@ -91,8 +91,10 @@ export class MastersService {
 
   async create(input: CreateMasterInput) {
     return this.prisma.$transaction(async (tx) => {
+      const normalizedUsername = input.username.trim().replace(/^@+/, '').toLowerCase();
+
       const existingUser = await tx.user.findUnique({
-        where: { telegramId: input.telegramId },
+        where: { username: normalizedUsername },
         include: { master: true },
       });
 
@@ -104,7 +106,7 @@ export class MastersService {
         existingUser ??
         (await tx.user.create({
           data: {
-            telegramId: input.telegramId,
+            username: normalizedUsername,
             role: 'MASTER',
           },
         }));
@@ -112,7 +114,7 @@ export class MastersService {
       if (existingUser && existingUser.role !== 'MASTER') {
         await tx.user.update({
           where: { id: existingUser.id },
-          data: { role: 'MASTER' },
+          data: { role: 'MASTER', username: normalizedUsername },
         });
       }
 

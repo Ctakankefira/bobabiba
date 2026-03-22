@@ -75,10 +75,29 @@ export class AuthService {
     }
 
     const telegramId = String(userData.id);
+    const username = userData.username?.trim().toLowerCase() || undefined;
     let dbUser = await this.usersService.findByTelegramId(telegramId);
     if (!dbUser) {
-      dbUser = await this.usersService.create({ telegramId, role: 'CLIENT' });
+      if (username) {
+        const existingByUsername = await this.usersService.findByUsername(username);
+        if (existingByUsername) {
+          dbUser = await this.usersService.updateIdentity(existingByUsername.id, {
+            telegramId,
+            username,
+          });
+        }
+      }
     }
+
+    if (!dbUser) {
+      dbUser = await this.usersService.create({ telegramId, username, role: 'CLIENT' });
+    } else if (dbUser.username !== username || dbUser.telegramId !== telegramId) {
+      dbUser = await this.usersService.updateIdentity(dbUser.id, {
+        telegramId,
+        username,
+      });
+    }
+
     const payload = { sub: dbUser.id, telegramId, role: dbUser.role };
     return {
       access_token: this.jwtService.sign(payload),

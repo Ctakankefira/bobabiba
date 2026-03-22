@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 
 type CreateMasterPayload = {
-  telegramId: string;
+  username: string;
   name: string;
   description?: string;
   category: string;
@@ -63,7 +63,7 @@ function parsePhotos(input: string): CreateMasterPayload["photos"] {
 }
 
 export default function AdminPage() {
-  const [telegramId, setTelegramId] = useState("");
+  const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -90,7 +90,7 @@ export default function AdminPage() {
     setError(null);
 
     const payload: CreateMasterPayload = {
-      telegramId,
+      username,
       name,
       description: description || undefined,
       category,
@@ -115,7 +115,7 @@ export default function AdminPage() {
       }
 
       setMessage(`Мастер ${data.name ?? name} успешно добавлен.`);
-      setTelegramId("");
+      setUsername("");
       setName("");
       setDescription("");
       setCategory("");
@@ -137,21 +137,21 @@ export default function AdminPage() {
           <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Admin</p>
           <h1 className="text-3xl font-semibold sm:text-4xl">Добавление мастеров</h1>
           <p className="max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-base">
-            Здесь можно создать пользователя-мастера, сразу добавить услуги и фотографии. Telegram ID
-            должен быть реальным ID пользователя Telegram.
+            Здесь можно создать карточку мастера по Telegram username в формате @username,
+            сразу добавить услуги и фотографии.
           </p>
         </div>
 
         <form className="mt-8 grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2">
-              <span className="text-sm text-[var(--muted)]">Telegram ID</span>
+              <span className="text-sm text-[var(--muted)]">Telegram username</span>
               <input
                 required
-                value={telegramId}
-                onChange={(event) => setTelegramId(event.target.value)}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
                 className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
-                placeholder="123456789"
+                placeholder="@username"
               />
             </label>
 

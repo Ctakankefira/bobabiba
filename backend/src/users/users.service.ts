@@ -11,8 +11,32 @@ export class UsersService {
     });
   }
 
-  async create(data: { telegramId: string; role?: 'CLIENT' | 'MASTER' }) {
+  async findByUsername(username: string) {
+    return this.prisma.user.findUnique({
+      where: { username },
+    });
+  }
+
+  async create(data: {
+    telegramId?: string;
+    username?: string;
+    role?: 'CLIENT' | 'MASTER';
+  }) {
     return this.prisma.user.create({
+      data,
+    });
+  }
+
+  async updateIdentity(
+    id: string,
+    data: {
+      telegramId?: string;
+      username?: string;
+      role?: 'CLIENT' | 'MASTER';
+    },
+  ) {
+    return this.prisma.user.update({
+      where: { id },
       data,
     });
   }

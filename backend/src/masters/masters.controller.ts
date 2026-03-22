@@ -76,7 +76,7 @@ class CreateMasterPhotoDto {
 class CreateMasterDto {
   @IsString()
   @IsNotEmpty()
-  telegramId!: string;
+  username!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -143,7 +143,7 @@ export class MastersController {
       return await this.mastersService.create(body);
     } catch (error) {
       if (error instanceof Error && error.message === 'MASTER_ALREADY_EXISTS') {
-        throw new ConflictException('Master already exists for this telegramId');
+        throw new ConflictException('Master already exists for this username');
       }
 
       throw error;
