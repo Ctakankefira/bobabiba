@@ -187,7 +187,6 @@ export default function CabinetPage() {
   const [clientRateComment, setClientRateComment] = useState("");
   const [clientRateSaving, setClientRateSaving] = useState(false);
 
-  const photoExample = useMemo(() => "https://example.com/photo-1.jpg|Фото профиля\nhttps://example.com/photo-2.jpg|Рабочее место", []);
   useEffect(() => {
     window.Telegram?.WebApp?.ready();
     window.Telegram?.WebApp?.expand();
@@ -312,11 +311,12 @@ export default function CabinetPage() {
     }
   }
 
-  async function persistMasterProfile() {
+  async function persistMasterProfile(servicesOverride?: LocalService[]) {
     if (!authToken) return;
     setMasterSaving(true);
     setMessage(null);
     setError(null);
+    const servicesToSave = servicesOverride ?? masterServices;
     try {
       const res = await fetch("/api/masters/me", {
         method: "PATCH",
@@ -328,7 +328,7 @@ export default function CabinetPage() {
           priceMin: masterForm.priceMin ? Number(masterForm.priceMin) : undefined,
           priceMax: masterForm.priceMax ? Number(masterForm.priceMax) : undefined,
           photos: parsePhotos(masterForm.photos),
-          services: masterServices.map((service) => ({
+          services: servicesToSave.map((service) => ({
             name: service.name,
             price: service.price,
             duration: service.duration,
@@ -430,7 +430,7 @@ export default function CabinetPage() {
     }
   }
 
-  function submitServiceDraft(event: FormEvent<HTMLFormElement>) {
+  async function submitServiceDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const duration = convertDraftDurationToMinutes(serviceDraft.durationValue, serviceDraft.durationUnit);
@@ -462,15 +462,18 @@ export default function CabinetPage() {
       description: serviceDraft.description.trim() || "",
     };
 
-    setMasterServices((current) => {
-      if (editingServiceId) {
-        return current.map((service) => (service.id === editingServiceId ? normalizedService : service));
-      }
+    const nextServices = editingServiceId
+      ? masterServices.map((service) => (service.id === editingServiceId ? normalizedService : service))
+      : [...masterServices, normalizedService];
 
-      return [...current, normalizedService];
-    });
+    setMasterServices(nextServices);
 
-    resetServiceEditor();
+    try {
+      await persistMasterProfile(nextServices);
+      resetServiceEditor();
+    } catch {
+      // handled in persistMasterProfile
+    }
   }
 
   async function submitReview() {
@@ -633,7 +636,6 @@ export default function CabinetPage() {
                         <input type="number" min={0} value={masterForm.priceMax} onChange={(event) => setMasterForm((current) => ({ ...current, priceMax: event.target.value }))} placeholder="Цена до" className="rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
                       </div>
                       <textarea value={masterForm.description} onChange={(event) => setMasterForm((current) => ({ ...current, description: event.target.value }))} placeholder="Описание" className="min-h-32 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
-                      <textarea value={masterForm.photos} onChange={(event) => setMasterForm((current) => ({ ...current, photos: event.target.value }))} placeholder={photoExample} className="min-h-28 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
                       <button type="submit" disabled={masterSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">{masterSaving ? "Сохраняю..." : "Сохранить профиль мастера"}</button>
                     </form>
                   ) : (
@@ -732,17 +734,14 @@ export default function CabinetPage() {
                     />
                   </label>
                   <div className="flex flex-wrap gap-3">
-                    <button type="submit" className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white">
-                      {editingServiceId ? "Сохранить изменения" : "Добавить услугу"}
+                    <button type="submit" disabled={masterSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">
+                      {masterSaving ? "Сохраняю..." : editingServiceId ? "Сохранить изменения" : "Добавить услугу"}
                     </button>
                     {editingServiceId ? (
                       <button type="button" onClick={resetServiceEditor} className="rounded-full border border-[var(--line)] bg-white px-5 py-3 text-sm">
                         Отменить редактирование
                       </button>
                     ) : null}
-                    <button type="button" onClick={persistMasterProfile} disabled={masterSaving} className="rounded-full border border-[var(--line)] bg-white px-5 py-3 text-sm disabled:opacity-60">
-                      {masterSaving ? "Сохраняю..." : "Сохранить услуги в профиле"}
-                    </button>
                   </div>
                 </form>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
