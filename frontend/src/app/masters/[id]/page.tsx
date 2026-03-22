@@ -309,6 +309,22 @@ export default function MasterProfilePage({
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5 lg:col-span-2">
+          <h2 className="text-xl font-semibold">Галерея работ</h2>
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {master.photos.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">Мастер пока не добавил фотографии работ.</p>
+            ) : (
+              master.photos.map((photo) => (
+                <article key={photo.id} className="overflow-hidden rounded-[24px] border border-[var(--line)] bg-white/80">
+                  <img src={photo.url} alt={photo.alt || master.name} className="h-56 w-full object-cover" />
+                  {photo.alt ? <div className="px-4 py-3 text-sm text-[var(--muted)]">{photo.alt}</div> : null}
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+
         <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
           <h2 className="text-xl font-semibold">Услуги</h2>
           <div className="mt-4 grid gap-3">

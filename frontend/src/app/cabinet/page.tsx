@@ -37,6 +37,12 @@ type ServiceDraft = {
   description: string;
 };
 
+type LocalPhoto = {
+  id: string;
+  url: string;
+  alt: string;
+};
+
 type Booking = {
   id: string;
   date: string;
@@ -90,16 +96,6 @@ const bookingStatusLabel = (status: Booking["status"]) =>
   ({ PENDING: "Новая заявка", CONFIRMED: "В работе", CANCELLED: "Отменена", COMPLETED: "Завершена" })[status];
 
 const masterAvatar = (master: MasterProfile | null) => master?.avatarUrl ?? master?.photos[0]?.url ?? null;
-
-const parsePhotos = (input: string) =>
-  input
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((row) => {
-      const [url, alt] = row.split("|").map((part) => part.trim());
-      return { url, alt: alt || undefined };
-    });
 
 const createEmptyServiceDraft = (): ServiceDraft => ({
   name: "",
@@ -164,11 +160,12 @@ export default function CabinetPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileAge, setProfileAge] = useState("");
-  const [masterTab, setMasterTab] = useState<"overview" | "services" | "stats">("overview");
+  const [masterTab, setMasterTab] = useState<"overview" | "services" | "gallery" | "stats">("overview");
   const [masterEditing, setMasterEditing] = useState(false);
   const [masterSaving, setMasterSaving] = useState(false);
   const [masterAvatarDraft, setMasterAvatarDraft] = useState("");
   const [masterServices, setMasterServices] = useState<LocalService[]>([]);
+  const [masterGallery, setMasterGallery] = useState<LocalPhoto[]>([]);
   const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(createEmptyServiceDraft());
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [masterForm, setMasterForm] = useState({
@@ -177,7 +174,6 @@ export default function CabinetPage() {
     category: MASTER_CATEGORIES[0],
     priceMin: "",
     priceMax: "",
-    photos: "",
   });
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -240,8 +236,14 @@ export default function CabinetPage() {
                 category: data.category || MASTER_CATEGORIES[0],
                 priceMin: data.priceMin?.toString() ?? "",
                 priceMax: data.priceMax?.toString() ?? "",
-                photos: data.photos.map((photo) => [photo.url, photo.alt ?? ""].join("|")).join("\n"),
               });
+              setMasterGallery(
+                data.photos.map((photo) => ({
+                  id: photo.id,
+                  url: photo.url,
+                  alt: photo.alt ?? "",
+                })),
+              );
               setMasterServices(
                 data.services.map((service) => ({
                   id: service.id,
@@ -313,12 +315,13 @@ export default function CabinetPage() {
     }
   }
 
-  async function persistMasterProfile(servicesOverride?: LocalService[]) {
+  async function persistMasterProfile(servicesOverride?: LocalService[], photosOverride?: LocalPhoto[]) {
     if (!authToken) return;
     setMasterSaving(true);
     setMessage(null);
     setError(null);
     const servicesToSave = servicesOverride ?? masterServices;
+    const photosToSave = photosOverride ?? masterGallery;
     try {
       const res = await fetch("/api/masters/me", {
         method: "PATCH",
@@ -330,7 +333,10 @@ export default function CabinetPage() {
           category: masterForm.category,
           priceMin: masterForm.priceMin ? Number(masterForm.priceMin) : undefined,
           priceMax: masterForm.priceMax ? Number(masterForm.priceMax) : undefined,
-          photos: parsePhotos(masterForm.photos),
+          photos: photosToSave.map((photo) => ({
+            url: photo.url,
+            alt: photo.alt || undefined,
+          })),
           services: servicesToSave.map((service) => ({
             name: service.name,
             price: service.price,
@@ -343,6 +349,13 @@ export default function CabinetPage() {
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить профиль мастера");
       setMaster(data);
       setMasterAvatarDraft(data.avatarUrl ?? "");
+      setMasterGallery(
+        data.photos.map((photo) => ({
+          id: photo.id,
+          url: photo.url,
+          alt: photo.alt ?? "",
+        })),
+      );
       setBookings(data.bookings ?? bookings);
       setMasterServices(
         data.services.map((service) => ({
@@ -454,6 +467,76 @@ export default function CabinetPage() {
       }
     };
     reader.readAsDataURL(file);
+  }
+
+  function handleGalleryUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) {
+      return;
+    }
+
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    if (!imageFiles.length) {
+      setError("Для галереи можно выбрать только изображения");
+      return;
+    }
+
+    Promise.all(
+      imageFiles.map(
+        (file) =>
+          new Promise<LocalPhoto>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === "string") {
+                resolve({
+                  id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  url: reader.result,
+                  alt: file.name.replace(/\.[^.]+$/, ""),
+                });
+              } else {
+                reject(new Error("Не удалось прочитать изображение"));
+              }
+            };
+            reader.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+            reader.readAsDataURL(file);
+          }),
+      ),
+    )
+      .then((photos) => {
+        setMasterGallery((current) => [...current, ...photos]);
+        setError(null);
+        setMessage(null);
+      })
+      .catch((uploadError) => {
+        setError(uploadError instanceof Error ? uploadError.message : "Не удалось загрузить фото");
+      });
+  }
+
+  function updateGalleryPhotoAlt(photoId: string, alt: string) {
+    setMasterGallery((current) => current.map((photo) => (photo.id === photoId ? { ...photo, alt } : photo)));
+  }
+
+  function removeGalleryPhoto(photoId: string) {
+    setMasterGallery((current) => current.filter((photo) => photo.id !== photoId));
+  }
+
+  function moveGalleryPhoto(photoId: string, direction: "left" | "right") {
+    setMasterGallery((current) => {
+      const index = current.findIndex((photo) => photo.id === photoId);
+      if (index === -1) {
+        return current;
+      }
+
+      const nextIndex = direction === "left" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [photo] = next.splice(index, 1);
+      next.splice(nextIndex, 0, photo);
+      return next;
+    });
   }
 
   async function submitServiceDraft(event: FormEvent<HTMLFormElement>) {
@@ -620,6 +703,7 @@ export default function CabinetPage() {
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={() => setMasterTab("overview")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "overview" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Профиль мастера</button>
               <button type="button" onClick={() => setMasterTab("services")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "services" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Услуги</button>
+              <button type="button" onClick={() => setMasterTab("gallery")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "gallery" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Галерея</button>
               <button type="button" onClick={() => setMasterTab("stats")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "stats" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Статистика</button>
             </div>
 
@@ -831,6 +915,69 @@ export default function CabinetPage() {
                 </div>
               </section>
             ) : null}
+
+            {masterTab === "gallery" ? (
+              <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Галерея</p>
+                    <h2 className="mt-3 text-2xl font-semibold">Фотографии работ</h2>
+                  </div>
+                  <span className="rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs text-[var(--muted)]">{masterGallery.length} фото</span>
+                </div>
+
+                <div className="mt-6 rounded-[28px] border border-[var(--line)] bg-white/80 p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white">
+                      Добавить фото
+                      <input type="file" accept="image/*" multiple onChange={handleGalleryUpload} className="hidden" />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => persistMasterProfile(undefined, masterGallery)}
+                      disabled={masterSaving}
+                      className="rounded-full border border-[var(--line)] bg-white px-5 py-3 text-sm disabled:opacity-60"
+                    >
+                      {masterSaving ? "Сохраняю..." : "Сохранить галерею"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {masterGallery.length === 0 ? (
+                    <article className="rounded-3xl border border-dashed border-[var(--line)] bg-white/75 p-5 text-sm text-[var(--muted)]">
+                      Пока нет фотографий. Загрузите первые снимки, чтобы клиенты видели ваши работы.
+                    </article>
+                  ) : (
+                    masterGallery.map((photo, index) => (
+                      <article key={photo.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-4">
+                        <img src={photo.url} alt={photo.alt || `Фото ${index + 1}`} className="h-48 w-full rounded-3xl object-cover" />
+                        <div className="mt-4 space-y-3">
+                          <input
+                            value={photo.alt}
+                            onChange={(event) => updateGalleryPhotoAlt(photo.id, event.target.value)}
+                            placeholder="Подпись к фото"
+                            className="w-full rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => moveGalleryPhoto(photo.id, "left")} disabled={index === 0} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
+                              Сдвинуть влево
+                            </button>
+                            <button type="button" onClick={() => moveGalleryPhoto(photo.id, "right")} disabled={index === masterGallery.length - 1} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
+                              Сдвинуть вправо
+                            </button>
+                            <button type="button" onClick={() => removeGalleryPhoto(photo.id)} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm text-red-600">
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </section>
+            ) : null}
+
             {masterTab === "stats" ? (
               <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
                 <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Статистика</p>
