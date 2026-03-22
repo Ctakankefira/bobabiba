@@ -27,6 +27,7 @@ model User {
   telegramId String?  @unique
   username   String?  @unique
   displayName String?
+  age        Int?
   role       Role     @default(CLIENT)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

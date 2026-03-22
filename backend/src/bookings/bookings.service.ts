@@ -116,7 +116,7 @@ export class BookingsService {
       data: {
         status,
         acceptedAt:
-          status === 'CONFIRMED'
+          status === 'CONFIRMED' || status === 'COMPLETED'
             ? booking.acceptedAt ?? new Date()
             : booking.acceptedAt,
         completedAt: status === 'COMPLETED' ? new Date() : booking.completedAt,
@@ -159,6 +159,10 @@ export class BookingsService {
 
     if (booking.status !== 'COMPLETED') {
       throw new ForbiddenException('Client can be rated only after a completed booking');
+    }
+
+    if (booking.clientRating !== null) {
+      throw new ForbiddenException('Client rating has already been saved');
     }
 
     return this.prisma.booking.update({

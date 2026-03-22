@@ -6,12 +6,33 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
         master: true,
       },
     });
+
+    if (!user) {
+      return null;
+    }
+
+    const clientRatingAggregate = await this.prisma.booking.aggregate({
+      where: {
+        clientId: id,
+        clientRating: {
+          not: null,
+        },
+      },
+      _avg: {
+        clientRating: true,
+      },
+    });
+
+    return {
+      ...user,
+      clientRatingAverage: clientRatingAggregate._avg.clientRating ?? 0,
+    };
   }
 
   async findByTelegramId(telegramId: string) {
@@ -29,6 +50,8 @@ export class UsersService {
   async create(data: {
     telegramId?: string;
     username?: string;
+    displayName?: string;
+    age?: number;
     role?: 'CLIENT' | 'MASTER';
   }) {
     return this.prisma.user.create({
@@ -41,6 +64,8 @@ export class UsersService {
     data: {
       telegramId?: string;
       username?: string;
+      displayName?: string;
+      age?: number;
       role?: 'CLIENT' | 'MASTER';
     },
   ) {
@@ -58,5 +83,32 @@ export class UsersService {
         master: true,
       },
     });
+  }
+
+  async updateProfile(id: string, data: { displayName?: string; age?: number | null }) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data,
+      include: {
+        master: true,
+      },
+    });
+
+    const clientRatingAggregate = await this.prisma.booking.aggregate({
+      where: {
+        clientId: id,
+        clientRating: {
+          not: null,
+        },
+      },
+      _avg: {
+        clientRating: true,
+      },
+    });
+
+    return {
+      ...user,
+      clientRatingAverage: clientRatingAggregate._avg.clientRating ?? 0,
+    };
   }
 }
