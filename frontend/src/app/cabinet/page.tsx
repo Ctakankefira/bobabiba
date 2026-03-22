@@ -512,10 +512,6 @@ export default function CabinetPage() {
       });
   }
 
-  function updateGalleryPhotoAlt(photoId: string, alt: string) {
-    setMasterGallery((current) => current.map((photo) => (photo.id === photoId ? { ...photo, alt } : photo)));
-  }
-
   function removeGalleryPhoto(photoId: string) {
     setMasterGallery((current) => current.filter((photo) => photo.id !== photoId));
   }
@@ -951,25 +947,19 @@ export default function CabinetPage() {
                   ) : (
                     masterGallery.map((photo, index) => (
                       <article key={photo.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-4">
-                        <img src={photo.url} alt={photo.alt || `Фото ${index + 1}`} className="h-48 w-full rounded-3xl object-cover" />
-                        <div className="mt-4 space-y-3">
-                          <input
-                            value={photo.alt}
-                            onChange={(event) => updateGalleryPhotoAlt(photo.id, event.target.value)}
-                            placeholder="Подпись к фото"
-                            className="w-full rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none"
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={() => moveGalleryPhoto(photo.id, "left")} disabled={index === 0} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
-                              Сдвинуть влево
-                            </button>
-                            <button type="button" onClick={() => moveGalleryPhoto(photo.id, "right")} disabled={index === masterGallery.length - 1} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
-                              Сдвинуть вправо
-                            </button>
-                            <button type="button" onClick={() => removeGalleryPhoto(photo.id)} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm text-red-600">
-                              Удалить
-                            </button>
-                          </div>
+                        <div className="overflow-hidden rounded-3xl bg-white">
+                          <img src={photo.url} alt={photo.alt || `Фото ${index + 1}`} className="h-auto w-full max-h-[520px] object-contain" />
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => moveGalleryPhoto(photo.id, "left")} disabled={index === 0} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
+                            Сдвинуть влево
+                          </button>
+                          <button type="button" onClick={() => moveGalleryPhoto(photo.id, "right")} disabled={index === masterGallery.length - 1} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm disabled:opacity-40">
+                            Сдвинуть вправо
+                          </button>
+                          <button type="button" onClick={() => removeGalleryPhoto(photo.id)} className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm text-red-600">
+                            Удалить
+                          </button>
                         </div>
                       </article>
                     ))

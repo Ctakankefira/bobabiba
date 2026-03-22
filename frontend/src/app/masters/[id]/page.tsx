@@ -317,8 +317,9 @@ export default function MasterProfilePage({
             ) : (
               master.photos.map((photo) => (
                 <article key={photo.id} className="overflow-hidden rounded-[24px] border border-[var(--line)] bg-white/80">
-                  <img src={photo.url} alt={photo.alt || master.name} className="h-56 w-full object-cover" />
-                  {photo.alt ? <div className="px-4 py-3 text-sm text-[var(--muted)]">{photo.alt}</div> : null}
+                  <div className="bg-white">
+                    <img src={photo.url} alt={photo.alt || master.name} className="h-auto w-full max-h-[560px] object-contain" />
+                  </div>
                 </article>
               ))
             )}
