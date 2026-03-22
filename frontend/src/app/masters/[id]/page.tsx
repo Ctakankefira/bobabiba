@@ -39,6 +39,7 @@ type Master = {
   priceMin?: number | null;
   priceMax?: number | null;
   rating: number;
+  avatarUrl?: string | null;
   services: Service[];
   photos: Photo[];
   reviews: Review[];
@@ -71,6 +72,10 @@ function formatPrice(master: Master) {
   }
 
   return "Цена по запросу";
+}
+
+function getMasterAvatar(master: Master) {
+  return master.avatarUrl ?? master.photos[0]?.url ?? null;
 }
 
 export default function MasterProfilePage({
@@ -210,7 +215,20 @@ export default function MasterProfilePage({
         <div className="grid gap-8 px-6 py-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">{master.category}</p>
-            <h1 className="mt-4 text-4xl font-semibold">{master.name}</h1>
+            <div className="mt-4 flex items-center gap-4">
+              {getMasterAvatar(master) ? (
+                <img
+                  src={getMasterAvatar(master)!}
+                  alt={master.name}
+                  className="h-24 w-24 rounded-[28px] border border-[var(--line)] object-cover shadow-lg"
+                />
+              ) : (
+                <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-[var(--line)] bg-white/70 text-3xl font-semibold">
+                  {master.name.slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <h1 className="text-4xl font-semibold">{master.name}</h1>
+            </div>
             <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
               {master.description || "Мастер пока не добавил подробное описание."}
             </p>

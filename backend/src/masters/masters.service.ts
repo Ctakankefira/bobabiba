@@ -49,8 +49,25 @@ type UpsertOwnMasterInput = {
 export class MastersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private withAvatar<
+    T extends {
+      user?: { avatarUrl?: string | null } | null;
+    },
+  >(master: T | null) {
+    if (!master) {
+      return null;
+    }
+
+    const { user, ...rest } = master;
+
+    return {
+      ...rest,
+      avatarUrl: user?.avatarUrl ?? null,
+    };
+  }
+
   async findAll(filters: MastersFilters) {
-    return this.prisma.master.findMany({
+    const masters = await this.prisma.master.findMany({
       where: {
         ...(filters.category
           ? { category: { equals: filters.category, mode: 'insensitive' } }
@@ -78,6 +95,7 @@ export class MastersService {
         ...(filters.rating !== undefined ? { rating: { gte: filters.rating } } : {}),
       },
       include: {
+        user: true,
         services: {
           orderBy: { createdAt: 'asc' },
         },
@@ -87,12 +105,15 @@ export class MastersService {
       },
       orderBy: [{ rating: 'desc' }, { createdAt: 'desc' }],
     });
+
+    return masters.map((master) => this.withAvatar(master));
   }
 
   async findOne(id: string) {
-    return this.prisma.master.findUnique({
+    const master = await this.prisma.master.findUnique({
       where: { id },
       include: {
+        user: true,
         services: {
           orderBy: { createdAt: 'asc' },
         },
@@ -113,12 +134,15 @@ export class MastersService {
         },
       },
     });
+
+    return this.withAvatar(master);
   }
 
   async findMine(userId: string) {
-    return this.prisma.master.findUnique({
+    const master = await this.prisma.master.findUnique({
       where: { userId },
       include: {
+        user: true,
         services: {
           orderBy: { createdAt: 'asc' },
         },
@@ -134,6 +158,8 @@ export class MastersService {
         },
       },
     });
+
+    return this.withAvatar(master);
   }
 
   async create(input: CreateMasterInput) {
@@ -165,7 +191,7 @@ export class MastersService {
         });
       }
 
-      return tx.master.create({
+      const master = await tx.master.create({
         data: {
           userId: user.id,
           name: input.name,
@@ -202,6 +228,8 @@ export class MastersService {
           user: true,
         },
       });
+
+      return this.withAvatar(master);
     });
   }
 
@@ -225,7 +253,7 @@ export class MastersService {
           where: { masterId: existingMaster.id },
         });
 
-        return tx.master.update({
+        const master = await tx.master.update({
           where: { id: existingMaster.id },
           data: {
             name: input.name,
@@ -259,6 +287,7 @@ export class MastersService {
             photos: {
               orderBy: { createdAt: 'asc' },
             },
+            user: true,
             bookings: {
               orderBy: { date: 'desc' },
               include: {
@@ -268,9 +297,11 @@ export class MastersService {
             },
           },
         });
+
+        return this.withAvatar(master);
       }
 
-      return tx.master.create({
+      const master = await tx.master.create({
         data: {
           userId,
           name: input.name,
@@ -304,6 +335,7 @@ export class MastersService {
           photos: {
             orderBy: { createdAt: 'asc' },
           },
+          user: true,
           bookings: {
             orderBy: { date: 'desc' },
             include: {
@@ -313,6 +345,8 @@ export class MastersService {
           },
         },
       });
+
+      return this.withAvatar(master);
     });
   }
 }

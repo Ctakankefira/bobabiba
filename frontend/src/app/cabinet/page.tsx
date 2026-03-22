@@ -40,6 +40,7 @@ type MasterProfile = {
   category: string;
   priceMin: number | null;
   priceMax: number | null;
+  avatarUrl?: string | null;
   services: Service[];
   photos: Array<{ id: string; url: string; alt: string | null }>;
   bookings: Booking[];
@@ -68,6 +69,8 @@ const bookingClientName = (booking: Booking) => booking.client.displayName || bo
 
 const bookingStatusLabel = (status: Booking["status"]) =>
   ({ PENDING: "Новая заявка", CONFIRMED: "В работе", CANCELLED: "Отменена", COMPLETED: "Завершена" })[status];
+
+const masterAvatar = (master: MasterProfile | null) => master?.avatarUrl ?? master?.photos[0]?.url ?? null;
 
 const parseServices = (input: string) =>
   input
@@ -443,7 +446,20 @@ export default function CabinetPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Профиль мастера</p>
-                      <h2 className="mt-3 text-2xl font-semibold">{master?.name || "Профиль мастера"}</h2>
+                      <div className="mt-3 flex items-center gap-4">
+                        {masterAvatar(master) ? (
+                          <img
+                            src={masterAvatar(master)!}
+                            alt={master?.name || "Мастер"}
+                            className="h-20 w-20 rounded-3xl border border-[var(--line)] object-cover shadow-lg"
+                          />
+                        ) : (
+                          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--line)] bg-white/80 text-2xl font-semibold">
+                            {(master?.name || viewer?.displayName || "М").slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <h2 className="text-2xl font-semibold">{master?.name || "Профиль мастера"}</h2>
+                      </div>
                     </div>
                     <button type="button" onClick={() => setMasterEditing((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
                       {masterEditing ? "Скрыть редактирование" : "Изменить профиль"}

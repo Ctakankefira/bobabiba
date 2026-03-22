@@ -23,6 +23,7 @@ type Master = {
   priceMin: number | null;
   priceMax: number | null;
   rating: number;
+  avatarUrl?: string | null;
   services: Service[];
   photos: Photo[];
 };
@@ -72,6 +73,10 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getMasterAvatar(master: Master) {
+  return master.avatarUrl ?? master.photos[0]?.url ?? null;
 }
 
 export default function Home() {
@@ -409,11 +414,24 @@ export default function Home() {
                       {master.rating.toFixed(1)} ★
                     </span>
                   </div>
-                  <div className="mt-12">
+                  <div className="mt-6 flex items-end gap-4">
+                    {getMasterAvatar(master) ? (
+                      <img
+                        src={getMasterAvatar(master)!}
+                        alt={master.name}
+                        className="h-20 w-20 rounded-3xl border border-white/25 object-cover shadow-lg"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/25 bg-white/15 text-2xl font-semibold">
+                        {master.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
                     <h2 className="text-2xl font-semibold">{master.name}</h2>
                     <p className="mt-2 text-sm text-white/80">
                       {master.description || "Профиль мастера скоро будет дополнен."}
                     </p>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-5 p-5">
