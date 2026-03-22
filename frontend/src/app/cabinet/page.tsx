@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ViewerProfile = {
   id: string;
+  displayName?: string | null;
   username?: string | null;
   role: "CLIENT" | "MASTER";
   master?: { id: string } | null;
@@ -29,6 +30,8 @@ type Booking = {
   notes: string | null;
   clientRating?: number | null;
   clientRatingComment?: string | null;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
   service: {
     id: string;
     name: string;
@@ -41,6 +44,7 @@ type Booking = {
   };
   client: {
     id: string;
+    displayName?: string | null;
     username?: string | null;
   };
   review?: {
@@ -140,6 +144,7 @@ export default function CabinetPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [masterSection, setMasterSection] = useState<"requests" | "stats">("requests");
 
   const examples = useMemo(
     () => ({
@@ -490,7 +495,11 @@ export default function CabinetPage() {
           {viewerProfile?.role === "MASTER" ? "Кабинет мастера" : "Кабинет клиента"}
         </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)] sm:text-base">
-          {viewerProfile?.username ? `Ваш username: @${viewerProfile.username}` : "Профиль загружен через Telegram."}
+          {viewerProfile?.displayName
+            ? `Профиль: ${viewerProfile.displayName}${viewerProfile.username ? ` • @${viewerProfile.username}` : ""}`
+            : viewerProfile?.username
+              ? `Ваш username: @${viewerProfile.username}`
+              : "Профиль загружен через Telegram."}
         </p>
 
         <div className="mt-5 flex flex-wrap gap-3">
@@ -593,7 +602,33 @@ export default function CabinetPage() {
             </form>
 
             <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-              <h2 className="text-xl font-semibold">Мои записи</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">Мои записи</h2>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMasterSection("requests")}
+                    className={`rounded-full px-3 py-2 text-xs transition ${
+                      masterSection === "requests"
+                        ? "bg-[var(--accent)] text-white"
+                        : "border border-[var(--line)] bg-white/80"
+                    }`}
+                  >
+                    Заявки
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMasterSection("stats")}
+                    className={`rounded-full px-3 py-2 text-xs transition ${
+                      masterSection === "stats"
+                        ? "bg-[var(--accent)] text-white"
+                        : "border border-[var(--line)] bg-white/80"
+                    }`}
+                  >
+                    Статистика
+                  </button>
+                </div>
+              </div>
               <div className="mt-4 grid gap-3">
                 {bookings.length === 0 ? (
                   <p className="text-sm text-[var(--muted)]">Пока никто не записался.</p>
@@ -607,56 +642,78 @@ export default function CabinetPage() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-[var(--muted)]">
-                        Клиент: @{booking.client.username || "без username"}
+                        Клиент: {booking.client.displayName || booking.client.username || "Клиент"}
                       </p>
-                      <p className="mt-1 text-sm text-[var(--muted)]">{formatDate(booking.date)}</p>
-                      {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
-                      {booking.clientRating ? (
-                        <p className="mt-2 text-sm text-[var(--muted)]">Оценка клиента: {booking.clientRating}/5</p>
-                      ) : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateBookingStatus(booking.id, "CONFIRMED")}
-                          className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
-                        >
-                          Подтвердить
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateBookingStatus(booking.id, "CANCELLED")}
-                          className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
-                        >
-                          Отменить
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateBookingStatus(booking.id, "COMPLETED")}
-                          className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
-                        >
-                          Завершить
-                        </button>
-                      </div>
-                      {booking.status === "COMPLETED" ? (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <span className="text-xs text-[var(--muted)]">Оценить клиента:</span>
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => rateClient(booking.id, value)}
-                              disabled={ratingSavingId === booking.id}
-                              className={`rounded-full px-3 py-1 text-xs transition ${
-                                booking.clientRating === value
-                                  ? "bg-[var(--accent)] text-white"
-                                  : "border border-[var(--line)] bg-white"
-                              } disabled:opacity-60`}
-                            >
-                              {value}
-                            </button>
-                          ))}
+                      <p className="mt-1 text-sm text-[var(--muted)]">Заказ на: {formatDate(booking.date)}</p>
+                      {masterSection === "stats" ? (
+                        <div className="mt-3 grid gap-2 text-sm text-[var(--muted)]">
+                          <p>Кто заказал услугу: {booking.client.displayName || booking.client.username || "Клиент"}</p>
+                          <p>Когда заказал: {formatDate(booking.date)}</p>
+                          <p>
+                            Когда взял в работу:{" "}
+                            {booking.acceptedAt ? formatDate(booking.acceptedAt) : "ещё не взял"}
+                          </p>
+                          <p>
+                            Когда закончил:{" "}
+                            {booking.completedAt ? formatDate(booking.completedAt) : "ещё не завершил"}
+                          </p>
+                          <p>Статус: {booking.status}</p>
+                          {booking.clientRating ? <p>Оценка клиента: {booking.clientRating}/5</p> : null}
+                          {booking.clientRatingComment ? (
+                            <p>Комментарий к клиенту: {booking.clientRatingComment}</p>
+                          ) : null}
                         </div>
-                      ) : null}
+                      ) : (
+                        <>
+                          {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
+                          {booking.clientRating ? (
+                            <p className="mt-2 text-sm text-[var(--muted)]">Оценка клиента: {booking.clientRating}/5</p>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateBookingStatus(booking.id, "CONFIRMED")}
+                              className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
+                            >
+                              Подтвердить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateBookingStatus(booking.id, "CANCELLED")}
+                              className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
+                            >
+                              Отменить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateBookingStatus(booking.id, "COMPLETED")}
+                              className="rounded-full border border-[var(--line)] px-3 py-2 text-xs"
+                            >
+                              Завершить
+                            </button>
+                          </div>
+                          {booking.status === "COMPLETED" ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-[var(--muted)]">Оценить клиента:</span>
+                              {[1, 2, 3, 4, 5].map((value) => (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => rateClient(booking.id, value)}
+                                  disabled={ratingSavingId === booking.id}
+                                  className={`rounded-full px-3 py-1 text-xs transition ${
+                                    booking.clientRating === value
+                                      ? "bg-[var(--accent)] text-white"
+                                      : "border border-[var(--line)] bg-white"
+                                  } disabled:opacity-60`}
+                                >
+                                  {value}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </article>
                   ))
                 )}

@@ -26,6 +26,7 @@ model User {
   id         String   @id @default(cuid())
   telegramId String?  @unique
   username   String?  @unique
+  displayName String?
   role       Role     @default(CLIENT)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -90,6 +91,8 @@ model Booking {
   notes      String?
   clientRating Int?
   clientRatingComment String?
+  acceptedAt DateTime?
+  completedAt DateTime?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

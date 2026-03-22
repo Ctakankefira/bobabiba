@@ -113,7 +113,14 @@ export class BookingsService {
 
     return this.prisma.booking.update({
       where: { id: bookingId },
-      data: { status },
+      data: {
+        status,
+        acceptedAt:
+          status === 'CONFIRMED'
+            ? booking.acceptedAt ?? new Date()
+            : booking.acceptedAt,
+        completedAt: status === 'COMPLETED' ? new Date() : booking.completedAt,
+      },
       include: {
         client: true,
         service: true,

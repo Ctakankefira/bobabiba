@@ -21,6 +21,7 @@ type Review = {
   rating: number;
   comment?: string | null;
   client: {
+    displayName?: string | null;
     username?: string | null;
   };
   booking: {
@@ -196,6 +197,15 @@ export default function MasterProfilePage({
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6">
+      <div className="mb-4 flex">
+        <a
+          href="/"
+          className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/75 px-4 py-2 text-sm transition hover:bg-white"
+        >
+          ← В каталог
+        </a>
+      </div>
+
       <section className="glass overflow-hidden rounded-[32px]">
         <div className="grid gap-8 px-6 py-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
@@ -267,6 +277,14 @@ export default function MasterProfilePage({
               ) : null}
               {bookingMessage ? <p className="text-sm text-green-700">{bookingMessage}</p> : null}
               {bookingError ? <p className="text-sm text-red-600">{bookingError}</p> : null}
+              {bookingMessage ? (
+                <a
+                  href="/"
+                  className="inline-flex w-fit items-center rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm transition hover:bg-white"
+                >
+                  Вернуться в каталог
+                </a>
+              ) : null}
             </div>
           </section>
         </div>
@@ -300,7 +318,7 @@ export default function MasterProfilePage({
               master.reviews.map((review) => (
                 <article key={review.id} className="rounded-2xl bg-white/80 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <strong>@{review.client.username || "клиент"}</strong>
+                    <strong>{review.client.displayName || review.client.username || "Клиент"}</strong>
                     <span className="text-sm text-[var(--muted)]">{review.rating}/5</span>
                   </div>
                   <p className="mt-2 text-sm text-[var(--muted)]">{review.booking.service.name}</p>
