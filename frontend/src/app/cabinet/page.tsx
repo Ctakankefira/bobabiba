@@ -148,6 +148,47 @@ const formatServiceDuration = (minutes: number) => {
   return `${minutes} мин`;
 };
 
+async function compressImage(
+  file: File,
+  {
+    maxWidth = 1600,
+    maxHeight = 1600,
+    quality = 0.82,
+  }: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+) {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Не удалось обработать изображение"));
+      img.src = imageUrl;
+    });
+
+    let { width, height } = image;
+
+    const ratio = Math.min(maxWidth / width, maxHeight / height, 1);
+    width = Math.round(width * ratio);
+    height = Math.round(height * ratio);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Не удалось подготовить изображение");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    return canvas.toDataURL("image/jpeg", quality);
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 export default function CabinetPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [viewer, setViewer] = useState<ViewerProfile | null>(null);
@@ -447,7 +488,7 @@ export default function CabinetPage() {
     }
   }
 
-  function handleMasterAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleMasterAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
       return;
@@ -458,18 +499,23 @@ export default function CabinetPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setMasterAvatarDraft(reader.result);
-        setMessage(null);
-        setError(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedImage = await compressImage(file, {
+        maxWidth: 1200,
+        maxHeight: 1200,
+        quality: 0.8,
+      });
+      setMasterAvatarDraft(compressedImage);
+      setMessage(null);
+      setError(null);
+    } catch (avatarError) {
+      setError(avatarError instanceof Error ? avatarError.message : "Не удалось подготовить фото");
+    } finally {
+      event.target.value = "";
+    }
   }
 
-  function handleGalleryUpload(event: ChangeEvent<HTMLInputElement>) {
+  async function handleGalleryUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) {
       return;
@@ -481,35 +527,29 @@ export default function CabinetPage() {
       return;
     }
 
-    Promise.all(
+    try {
+      const photos = await Promise.all(
       imageFiles.map(
-        (file) =>
-          new Promise<LocalPhoto>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (typeof reader.result === "string") {
-                resolve({
-                  id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  url: reader.result,
-                  alt: file.name.replace(/\.[^.]+$/, ""),
-                });
-              } else {
-                reject(new Error("Не удалось прочитать изображение"));
-              }
-            };
-            reader.onerror = () => reject(new Error("Не удалось прочитать изображение"));
-            reader.readAsDataURL(file);
+        async (file) => ({
+          id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          url: await compressImage(file, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.82,
           }),
+          alt: file.name.replace(/\.[^.]+$/, ""),
+        }),
       ),
-    )
-      .then((photos) => {
-        setMasterGallery((current) => [...current, ...photos]);
-        setError(null);
-        setMessage(null);
-      })
-      .catch((uploadError) => {
-        setError(uploadError instanceof Error ? uploadError.message : "Не удалось загрузить фото");
-      });
+      );
+
+      setMasterGallery((current) => [...current, ...photos]);
+      setError(null);
+      setMessage(null);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Не удалось загрузить фото");
+    } finally {
+      event.target.value = "";
+    }
   }
 
   function removeGalleryPhoto(photoId: string) {
