@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  MASTER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id         String   @id @default(cuid())
+  telegramId String   @unique
+  role       Role     @default(CLIENT)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  master     Master?
+  bookings   Booking[]
+  reviews    Review[]
+  favorites  Favorite[]
+  messages   Message[]
+
+  @@map("users")
+}
+
+model Master {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  category    String
+  priceMin    Float?
+  priceMax    Float?
+  rating      Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  services    Service[]
+  bookings    Booking[]
+  reviews     Review[]
+  photos      Photo[]
+  favorites   Favorite[]
+
+  @@map("masters")
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  masterId    String
+  master      Master  @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Float
+  duration    Int     // in minutes
+  createdAt   DateTime @default(now())
+
+  bookings    Booking[]
+
+  @@map("services")
+}
+
+model Booking {
+  id         String        @id @default(cuid())
+  clientId   String
+  client     User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  masterId   String
+  master     Master        @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  date       DateTime
+  status     BookingStatus @default(PENDING)
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  review     Review?
+
+  @@map("bookings")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  masterId  String
+  master    Master   @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  masterId  String
+  master    Master   @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  createdAt DateTime @default(now())
+
+  @@map("photos")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  masterId  String
+  master    Master   @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, masterId])
+  @@map("favorites")
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+  message    String
+  createdAt  DateTime @default(now())
+
+  @@map("messages")
+}
