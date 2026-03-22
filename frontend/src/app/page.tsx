@@ -27,6 +27,13 @@ type Master = {
   photos: Photo[];
 };
 
+type ViewerProfile = {
+  id: string;
+  username?: string | null;
+  role: "CLIENT" | "MASTER";
+  master?: { id: string } | null;
+};
+
 declare global {
   interface Window {
     Telegram?: {
@@ -64,6 +71,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Все");
   const [viewerName, setViewerName] = useState("Гость");
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [viewerProfile, setViewerProfile] = useState<ViewerProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
+  const [roleSaving, setRoleSaving] = useState(false);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -74,6 +86,64 @@ export default function Home() {
     if (firstName) {
       setViewerName(firstName);
     }
+  }, []);
+
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    const initData = webApp?.initData;
+
+    async function bootstrapViewer() {
+      if (!initData) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const authResponse = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ initData }),
+        });
+
+        if (!authResponse.ok) {
+          throw new Error("Auth failed");
+        }
+
+        const authData = (await authResponse.json()) as {
+          access_token: string;
+        };
+
+        setAuthToken(authData.access_token);
+
+        const profileResponse = await fetch("/api/users/profile", {
+          headers: {
+            Authorization: `Bearer ${authData.access_token}`,
+          },
+        });
+
+        if (!profileResponse.ok) {
+          throw new Error("Profile load failed");
+        }
+
+        const profile = (await profileResponse.json()) as ViewerProfile;
+        setViewerProfile(profile);
+
+        const roleChoiceKey = `role-choice:${profile.id}`;
+        const hasRoleChoice = window.localStorage.getItem(roleChoiceKey);
+        if (!hasRoleChoice) {
+          setRolePickerOpen(true);
+        }
+      } catch {
+        setAuthToken(null);
+        setViewerProfile(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    bootstrapViewer();
   }, []);
 
   useEffect(() => {
@@ -135,8 +205,69 @@ export default function Home() {
     [masters],
   );
 
+  async function chooseRole(role: "CLIENT" | "MASTER") {
+    if (!authToken || !viewerProfile) {
+      return;
+    }
+
+    setRoleSaving(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/users/role", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ role }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Role update failed");
+      }
+
+      const updatedProfile = (await response.json()) as ViewerProfile;
+      setViewerProfile(updatedProfile);
+      window.localStorage.setItem(`role-choice:${updatedProfile.id}`, role);
+      setRolePickerOpen(false);
+    } catch {
+      setError("Не удалось сохранить выбранную роль");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-4 sm:px-6 sm:py-6">
+      {rolePickerOpen ? (
+        <section className="mb-6 rounded-[32px] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-lg">
+          <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Вход</p>
+          <h2 className="mt-3 text-2xl font-semibold">Кто ты в приложении?</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+            Выбери роль на старте. Клиент будет искать мастеров и записываться, а мастер
+            сможет заполнить свою анкету и принимать заявки.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => chooseRole("CLIENT")}
+              disabled={roleSaving}
+              className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition disabled:opacity-60"
+            >
+              {roleSaving ? "Сохраняю..." : "Я клиент"}
+            </button>
+            <button
+              type="button"
+              onClick={() => chooseRole("MASTER")}
+              disabled={roleSaving}
+              className="rounded-full border border-[var(--line)] bg-white/80 px-5 py-3 text-sm font-medium transition disabled:opacity-60"
+            >
+              {roleSaving ? "Сохраняю..." : "Я мастер"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section className="glass fade-up overflow-hidden rounded-[32px]">
         <div className="grid gap-8 px-5 py-6 sm:px-8 sm:py-8 lg:grid-cols-[1.35fr_0.9fr] lg:px-10">
           <div className="space-y-6">
@@ -147,15 +278,28 @@ export default function Home() {
               <p className="text-sm uppercase tracking-[0.28em] text-[var(--muted)]">
                 {viewerName}, подбор мастеров рядом
               </p>
+              {authLoading ? null : viewerProfile ? (
+                <div className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/60 px-4 py-2 text-sm text-[var(--muted)]">
+                  Роль: {viewerProfile.role === "MASTER" ? "мастер" : "клиент"}
+                </div>
+              ) : null}
               <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
                 Маркетплейс мастеров с быстрым входом через Telegram
               </h1>
               <p className="max-w-2xl text-base leading-7 text-[var(--muted)] sm:text-lg">
-                Смотрите каталог, сравнивайте цены и собирайте MVP, который уже
-                похож на реальный продукт, а не на стартовый шаблон.
+                Смотри каталог, сравнивай цены и собирай живой сервис: мастер заполняет
+                анкету, клиент выбирает исполнителя и записывается прямо внутри Mini App.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
+              {viewerProfile?.role === "MASTER" ? (
+                <a
+                  href="/admin"
+                  className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm text-white transition hover:opacity-90"
+                >
+                  Заполнить анкету мастера
+                </a>
+              ) : null}
               {categories.map((category) => {
                 const active = category === selectedCategory;
                 return (
@@ -195,10 +339,7 @@ export default function Home() {
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className="glass h-72 animate-pulse rounded-[28px]"
-              />
+              <div key={index} className="glass h-72 animate-pulse rounded-[28px]" />
             ))}
           </div>
         ) : error ? (
@@ -210,7 +351,8 @@ export default function Home() {
           <div className="glass rounded-[28px] p-8 text-center">
             <h2 className="text-2xl font-semibold">Мастеров пока нет</h2>
             <p className="mt-3 text-[var(--muted)]">
-              Добавьте записи в базу и каталог сразу начнет наполняться.
+              Добавьте записи в базу или заполните анкету мастера, и каталог сразу начнёт
+              наполняться.
             </p>
           </div>
         ) : (
@@ -252,9 +394,7 @@ export default function Home() {
                             className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-2 text-sm"
                           >
                             <span>{service.name}</span>
-                            <span className="text-[var(--muted)]">
-                              {service.duration} мин
-                            </span>
+                            <span className="text-[var(--muted)]">{service.duration} мин</span>
                           </li>
                         ))}
                       </ul>
