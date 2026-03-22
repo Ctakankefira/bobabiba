@@ -8,6 +8,25 @@ type MastersFilters = {
   rating?: number;
 };
 
+type CreateMasterInput = {
+  telegramId: string;
+  name: string;
+  description?: string;
+  category: string;
+  priceMin?: number;
+  priceMax?: number;
+  services?: Array<{
+    name: string;
+    description?: string;
+    price: number;
+    duration: number;
+  }>;
+  photos?: Array<{
+    url: string;
+    alt?: string;
+  }>;
+};
+
 @Injectable()
 export class MastersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -67,6 +86,73 @@ export class MastersService {
           take: 10,
         },
       },
+    });
+  }
+
+  async create(input: CreateMasterInput) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { telegramId: input.telegramId },
+        include: { master: true },
+      });
+
+      if (existingUser?.master) {
+        throw new Error('MASTER_ALREADY_EXISTS');
+      }
+
+      const user =
+        existingUser ??
+        (await tx.user.create({
+          data: {
+            telegramId: input.telegramId,
+            role: 'MASTER',
+          },
+        }));
+
+      if (existingUser && existingUser.role !== 'MASTER') {
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: { role: 'MASTER' },
+        });
+      }
+
+      return tx.master.create({
+        data: {
+          userId: user.id,
+          name: input.name,
+          description: input.description,
+          category: input.category,
+          priceMin: input.priceMin,
+          priceMax: input.priceMax,
+          services: input.services?.length
+            ? {
+                create: input.services.map((service) => ({
+                  name: service.name,
+                  description: service.description,
+                  price: service.price,
+                  duration: service.duration,
+                })),
+              }
+            : undefined,
+          photos: input.photos?.length
+            ? {
+                create: input.photos.map((photo) => ({
+                  url: photo.url,
+                  alt: photo.alt,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          services: {
+            orderBy: { createdAt: 'asc' },
+          },
+          photos: {
+            orderBy: { createdAt: 'asc' },
+          },
+          user: true,
+        },
+      });
     });
   }
 }
