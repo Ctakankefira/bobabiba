@@ -109,6 +109,8 @@ function formatDate(value: string) {
   });
 }
 
+const ROLE_CHOICE_PREFIX = "role-choice:";
+
 export default function CabinetPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [viewerProfile, setViewerProfile] = useState<ViewerProfile | null>(null);
@@ -134,6 +136,17 @@ export default function CabinetPage() {
     }),
     [],
   );
+
+  function leaveCabinet() {
+    window.location.href = "/";
+  }
+
+  function changeRole() {
+    if (viewerProfile) {
+      window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewerProfile.id}`);
+    }
+    window.location.href = "/?pickRole=1";
+  }
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -321,6 +334,23 @@ export default function CabinetPage() {
         <p className="mt-3 text-sm leading-6 text-[var(--muted)] sm:text-base">
           {viewerProfile?.username ? `Ваш username: @${viewerProfile.username}` : "Профиль загружен через Telegram."}
         </p>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={leaveCabinet}
+            className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm text-white transition hover:opacity-90"
+          >
+            Выйти в каталог
+          </button>
+          <button
+            type="button"
+            onClick={changeRole}
+            className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm transition hover:bg-white"
+          >
+            Сменить роль
+          </button>
+        </div>
 
         {message ? <p className="mt-4 text-sm text-green-700">{message}</p> : null}
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}

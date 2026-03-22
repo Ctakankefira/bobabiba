@@ -53,6 +53,8 @@ declare global {
 
 const categories = ["Все", "Барберы", "Маникюр", "Брови", "Массаж", "Тату"];
 
+const ROLE_CHOICE_PREFIX = "role-choice:";
+
 function formatPrice(master: Master) {
   if (master.priceMin && master.priceMax) {
     return `${master.priceMin.toLocaleString("ru-RU")} - ${master.priceMax.toLocaleString("ru-RU")} ₽`;
@@ -159,10 +161,13 @@ export default function Home() {
         const profile = (await profileResponse.json()) as ViewerProfile;
         setViewerProfile(profile);
 
-        const roleChoiceKey = `role-choice:${profile.id}`;
+        const roleChoiceKey = `${ROLE_CHOICE_PREFIX}${profile.id}`;
         const hasRoleChoice = window.localStorage.getItem(roleChoiceKey);
-        if (!hasRoleChoice) {
+        const forceRolePicker = new URLSearchParams(window.location.search).get("pickRole") === "1";
+        if (!hasRoleChoice || forceRolePicker) {
           setRolePickerOpen(true);
+        } else if (hasRoleChoice !== profile.role) {
+          window.localStorage.setItem(roleChoiceKey, profile.role);
         }
       } catch {
         setAuthToken(null);
@@ -257,7 +262,8 @@ export default function Home() {
 
       const updatedProfile = (await response.json()) as ViewerProfile;
       setViewerProfile(updatedProfile);
-      window.localStorage.setItem(`role-choice:${updatedProfile.id}`, role);
+      window.localStorage.setItem(`${ROLE_CHOICE_PREFIX}${updatedProfile.id}`, role);
+      window.history.replaceState({}, "", "/");
       setRolePickerOpen(false);
     } catch {
       setError("Не удалось сохранить выбранную роль");
@@ -280,6 +286,12 @@ export default function Home() {
       return;
     }
 
+    const normalizedDate = new Date(bookingDate);
+    if (Number.isNaN(normalizedDate.getTime())) {
+      setBookingError("Укажите корректную дату и время");
+      return;
+    }
+
     setBookingSaving(true);
     setBookingMessage(null);
     setBookingError(null);
@@ -294,7 +306,7 @@ export default function Home() {
         body: JSON.stringify({
           masterId: selectedMaster.id,
           serviceId: selectedServiceId,
-          date: bookingDate,
+          date: normalizedDate.toISOString(),
           notes: bookingNotes || undefined,
         }),
       });
@@ -318,14 +330,15 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-4 sm:px-6 sm:py-6">
       {rolePickerOpen ? (
-        <section className="mb-6 rounded-[32px] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
+          <section className="w-full max-w-xl rounded-[32px] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-lg sm:p-8">
           <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Вход</p>
           <h2 className="mt-3 text-2xl font-semibold">Кто ты в приложении?</h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
             Выбери роль на старте. Клиент будет искать мастеров и записываться, а мастер
             сможет заполнить свою анкету и принимать заявки.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => chooseRole("CLIENT")}
@@ -342,8 +355,9 @@ export default function Home() {
             >
               {roleSaving ? "Сохраняю..." : "Я мастер"}
             </button>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {selectedMaster ? (
@@ -384,6 +398,9 @@ export default function Home() {
                 type="datetime-local"
                 value={bookingDate}
                 onChange={(event) => setBookingDate(event.target.value)}
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+                  .toISOString()
+                  .slice(0, 16)}
                 className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
               />
             </label>
