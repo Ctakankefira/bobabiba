@@ -272,6 +272,15 @@ export default function Home() {
     }
   }
 
+  function reopenRolePicker() {
+    if (!viewerProfile) {
+      return;
+    }
+
+    window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewerProfile.id}`);
+    setRolePickerOpen(true);
+  }
+
   function openBooking(master: Master) {
     setSelectedMaster(master);
     setSelectedServiceId(master.services[0]?.id ?? "");
@@ -460,10 +469,19 @@ export default function Home() {
             <div className="flex flex-wrap gap-3">
               <a
                 href="/cabinet"
-                className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm text-white transition hover:opacity-90"
+                className="rounded-full bg-[var(--foreground)] px-5 py-3 text-sm font-medium text-white shadow-lg shadow-black/10 transition hover:opacity-90"
               >
-                Личный кабинет
+                {viewerProfile?.role === "MASTER" ? "Профиль мастера" : "Профиль клиента"}
               </a>
+              {viewerProfile ? (
+                <button
+                  type="button"
+                  onClick={reopenRolePicker}
+                  className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm transition hover:bg-white"
+                >
+                  Сменить роль
+                </button>
+              ) : null}
               {viewerProfile?.role === "MASTER" ? (
                 <a
                   href="/cabinet"

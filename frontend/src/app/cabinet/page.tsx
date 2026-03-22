@@ -555,7 +555,28 @@ export default function CabinetPage() {
             </section>
           </div>
         ) : (
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="mt-8 space-y-6">
+            <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
+              <h2 className="text-xl font-semibold">Мой профиль</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <article className="rounded-2xl bg-white/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Роль</p>
+                  <p className="mt-2 text-lg font-semibold">Клиент</p>
+                </article>
+                <article className="rounded-2xl bg-white/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Username</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {viewerProfile?.username ? `@${viewerProfile.username}` : "Не указан"}
+                  </p>
+                </article>
+                <article className="rounded-2xl bg-white/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Всего записей</p>
+                  <p className="mt-2 text-lg font-semibold">{bookings.length}</p>
+                </article>
+              </div>
+            </section>
+
+            <div className="grid gap-6 lg:grid-cols-2">
             <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
               <h2 className="text-xl font-semibold">Текущие записи</h2>
               <div className="mt-4 grid gap-3">
@@ -603,6 +624,7 @@ export default function CabinetPage() {
                 )}
               </div>
             </section>
+            </div>
           </div>
         )}
       </section>
