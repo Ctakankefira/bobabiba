@@ -29,6 +29,7 @@ type CreateMasterInput = {
 
 type UpsertOwnMasterInput = {
   name: string;
+  avatarUrl?: string;
   description?: string;
   category: string;
   priceMin?: number;
@@ -241,7 +242,10 @@ export class MastersService {
 
       await tx.user.update({
         where: { id: userId },
-        data: { role: 'MASTER' },
+        data: {
+          role: 'MASTER',
+          ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl || null } : {}),
+        },
       });
 
       if (existingMaster) {

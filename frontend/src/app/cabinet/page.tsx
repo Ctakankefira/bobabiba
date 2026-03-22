@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useState, useEffect } from "react";
 
 type ViewerProfile = {
   id: string;
@@ -167,6 +167,7 @@ export default function CabinetPage() {
   const [masterTab, setMasterTab] = useState<"overview" | "services" | "stats">("overview");
   const [masterEditing, setMasterEditing] = useState(false);
   const [masterSaving, setMasterSaving] = useState(false);
+  const [masterAvatarDraft, setMasterAvatarDraft] = useState("");
   const [masterServices, setMasterServices] = useState<LocalService[]>([]);
   const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(createEmptyServiceDraft());
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -232,6 +233,7 @@ export default function CabinetPage() {
             const data = (await masterRes.json()) as MasterProfile | null;
             if (data) {
               setMaster(data);
+              setMasterAvatarDraft(data.avatarUrl ?? "");
               setMasterForm({
                 name: data.name ?? "",
                 description: data.description ?? "",
@@ -323,6 +325,7 @@ export default function CabinetPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({
           name: masterForm.name,
+          avatarUrl: masterAvatarDraft,
           description: masterForm.description,
           category: masterForm.category,
           priceMin: masterForm.priceMin ? Number(masterForm.priceMin) : undefined,
@@ -339,6 +342,7 @@ export default function CabinetPage() {
       const data = (await res.json()) as MasterProfile & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить профиль мастера");
       setMaster(data);
+      setMasterAvatarDraft(data.avatarUrl ?? "");
       setBookings(data.bookings ?? bookings);
       setMasterServices(
         data.services.map((service) => ({
@@ -428,6 +432,28 @@ export default function CabinetPage() {
     if (editingServiceId === serviceId) {
       resetServiceEditor();
     }
+  }
+
+  function handleMasterAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError("Можно выбрать только изображение для аватарки");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setMasterAvatarDraft(reader.result);
+        setMessage(null);
+        setError(null);
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   async function submitServiceDraft(event: FormEvent<HTMLFormElement>) {
@@ -625,6 +651,37 @@ export default function CabinetPage() {
 
                   {masterEditing ? (
                     <form className="mt-6 space-y-4" onSubmit={saveMaster}>
+                      <div className="rounded-3xl border border-[var(--line)] bg-white/80 p-5">
+                        <p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Аватар мастера</p>
+                        <div className="mt-4 flex flex-wrap items-center gap-4">
+                          {masterAvatarDraft ? (
+                            <img
+                              src={masterAvatarDraft}
+                              alt={master?.name || "Аватар мастера"}
+                              className="h-24 w-24 rounded-3xl border border-[var(--line)] object-cover shadow-lg"
+                            />
+                          ) : (
+                            <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-[var(--line)] bg-white text-3xl font-semibold">
+                              {(masterForm.name || viewer?.displayName || "М").slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="space-y-3">
+                            <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm">
+                              Выбрать фото
+                              <input type="file" accept="image/*" onChange={handleMasterAvatarChange} className="hidden" />
+                            </label>
+                            {masterAvatarDraft ? (
+                              <button
+                                type="button"
+                                onClick={() => setMasterAvatarDraft("")}
+                                className="block rounded-full border border-[var(--line)] bg-white px-4 py-2 text-sm"
+                              >
+                                Убрать фото
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
                       <input value={masterForm.name} onChange={(event) => setMasterForm((current) => ({ ...current, name: event.target.value }))} placeholder="Имя мастера" className="w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
                       <div className="grid gap-4 md:grid-cols-3">
                         <select value={masterForm.category} onChange={(event) => setMasterForm((current) => ({ ...current, category: event.target.value }))} className="rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none">

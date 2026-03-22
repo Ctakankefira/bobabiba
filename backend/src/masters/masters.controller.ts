@@ -22,7 +22,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   ValidateNested,
 } from 'class-validator';
 import { ConfigService } from '@nestjs/config';
@@ -69,7 +68,8 @@ class CreateMasterServiceDto {
 }
 
 class CreateMasterPhotoDto {
-  @IsUrl()
+  @IsString()
+  @IsNotEmpty()
   url!: string;
 
   @IsOptional()
@@ -121,6 +121,10 @@ class UpdateOwnMasterDto {
   @IsString()
   @IsNotEmpty()
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
 
   @IsOptional()
   @IsString()
