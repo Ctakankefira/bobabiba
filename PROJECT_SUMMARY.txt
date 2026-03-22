@@ -1,0 +1,314 @@
+# Telegram Mini App - Маркетплейс Мастеров
+## Полная документация проекта
+
+### 📋 Обзор проекта
+Платформа для мастеров услуг, где клиенты могут записываться онлайн через Telegram Mini App.
+
+**Технологии:**
+- Backend: NestJS + Prisma + PostgreSQL
+- Frontend: Next.js + Telegram WebApp SDK
+- Bot: Node.js + Telegraf
+- Деплой: Railway (backend/bot) + Vercel (frontend)
+
+---
+
+## 🏗️ Архитектура проекта
+
+### Структура файлов:
+```
+tgbot/
+├── backend/ (NestJS API сервер)
+│   ├── src/
+│   │   ├── auth/ (аутентификация через Telegram)
+│   │   ├── users/ (пользователи)
+│   │   ├── masters/ (мастера)
+│   │   ├── bookings/ (записи)
+│   │   ├── reviews/ (отзывы)
+│   │   └── prisma/ (ORM)
+│   ├── prisma/schema.prisma
+│   ├── Dockerfile
+│   └── package.json
+├── frontend/ (Next.js Mini App)
+│   ├── src/app/
+│   │   ├── api/ (прокси к backend)
+│   │   ├── globals.css
+│   │   └── page.tsx
+│   ├── Dockerfile
+│   └── package.json
+├── bot/ (Telegram бот)
+│   ├── index.js
+│   └── package.json
+├── docker-compose.yml (для локальной разработки)
+└── README.md
+```
+
+---
+
+## 🗄️ Структура базы данных (Prisma Schema)
+
+### Модели:
+
+#### User
+- id: String (PK)
+- telegramId: String (unique)
+- role: CLIENT | MASTER
+- createdAt: DateTime
+- updatedAt: DateTime
+
+#### Master
+- id: String (PK)
+- userId: String (FK to User)
+- name: String
+- description: String?
+- category: String
+- priceMin: Float?
+- priceMax: Float?
+- rating: Float (default 0)
+- createdAt: DateTime
+- updatedAt: DateTime
+
+#### Service
+- id: String (PK)
+- masterId: String (FK)
+- name: String
+- description: String?
+- price: Float
+- duration: Int (minutes)
+- createdAt: DateTime
+
+#### Booking
+- id: String (PK)
+- clientId: String (FK)
+- masterId: String (FK)
+- serviceId: String (FK)
+- date: DateTime
+- status: PENDING | CONFIRMED | CANCELLED | COMPLETED
+- notes: String?
+- createdAt: DateTime
+- updatedAt: DateTime
+
+#### Review
+- id: String (PK)
+- bookingId: String (FK, unique)
+- clientId: String (FK)
+- masterId: String (FK)
+- rating: Int (1-5)
+- comment: String?
+- createdAt: DateTime
+
+#### Photo
+- id: String (PK)
+- masterId: String (FK)
+- url: String
+- alt: String?
+- createdAt: DateTime
+
+#### Favorite
+- id: String (PK)
+- clientId: String (FK)
+- masterId: String (FK)
+- createdAt: DateTime
+- unique: (clientId, masterId)
+
+#### Message
+- id: String (PK)
+- senderId: String (FK)
+- sender: User @relation("sentMessages")
+- receiverId: String (FK)
+- receiver: User @relation("receivedMessages")
+- message: String
+- createdAt: DateTime
+
+---
+
+## 🔗 API Эндпоинты
+
+### Аутентификация
+- POST /auth/telegram - авторизация через initData
+
+### Пользователи
+- GET /users/profile - профиль пользователя (JWT required)
+
+### Мастера
+- GET /masters - список мастеров (фильтры: category, priceMin, priceMax, rating)
+- GET /masters/:id - детальная информация о мастере
+- POST /masters - создание профиля мастера (JWT required)
+- PUT /masters/:id - обновление профиля
+
+### Услуги
+- GET /masters/:id/services - услуги мастера
+
+### Записи
+- GET /bookings - мои записи (JWT required)
+- POST /bookings - создать запись (JWT required)
+- PUT /bookings/:id/status - изменить статус
+
+### Отзывы
+- GET /masters/:id/reviews - отзывы мастера
+- POST /reviews - оставить отзыв
+
+### Избранное
+- GET /favorites - избранные мастера
+- POST /favorites - добавить в избранное
+- DELETE /favorites/:id - удалить из избранного
+
+---
+
+## 🔐 Переменные окружения
+
+### Backend (.env)
+```
+DATABASE_URL=postgresql://user:pass@host:5432/db
+JWT_SECRET=your-super-secret-jwt-key
+BOT_TOKEN=your-bot-token-from-botfather
+WEB_APP_URL=https://your-frontend.vercel.app
+BACKEND_URL=https://your-backend.railway.app
+```
+
+### Frontend
+```
+BACKEND_URL=https://your-backend.railway.app
+```
+
+### Bot
+```
+BOT_TOKEN=your-bot-token
+BACKEND_URL=https://your-backend.railway.app
+WEB_APP_URL=https://your-frontend.vercel.app
+```
+
+---
+
+## 🚀 Инструкции по деплою
+
+### 1. GitHub
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/yourusername/repo.git
+git push -u origin main
+```
+
+### 2. Backend (Railway)
+- Создать проект из GitHub
+- Root directory: `backend/`
+- Добавить PostgreSQL плагин
+- Добавить переменные окружения
+- В терминале: `npx prisma generate && npx prisma migrate deploy`
+
+### 3. Frontend (Vercel)
+- Импортировать из GitHub
+- Root directory: `frontend/`
+- Environment variables: BACKEND_URL
+
+### 4. Bot (Railway)
+- Новый проект из GitHub
+- Root directory: `bot/`
+- Environment variables: BOT_TOKEN, BACKEND_URL, WEB_APP_URL
+
+### 5. BotFather настройка
+```
+/setmenubutton
+[Bot username]
+Открыть приложение
+https://your-vercel-domain.vercel.app
+```
+
+---
+
+## 🧪 Тестирование
+
+### Локальная разработка
+```bash
+# Все сервисы
+npm run dev
+
+# Или по отдельности
+cd backend && npm run start:dev
+cd frontend && npm run dev
+cd bot && npm run dev
+```
+
+### Production тестирование
+1. /start в боте
+2. Нажать "Открыть приложение"
+3. Проверить авторизацию
+4. Посмотреть каталог мастеров
+
+---
+
+## 📝 Ключевые файлы
+
+### Backend: src/auth/auth.service.ts
+```typescript
+async validateTelegramInitData(initData: string) {
+  // Валидация initData с HMAC-SHA256
+  // Создание/получение пользователя
+  // Генерация JWT токена
+}
+```
+
+### Frontend: src/app/page.tsx
+```tsx
+// Каталог мастеров с фильтрами
+// Telegram WebApp.initData для авторизации
+```
+
+### Bot: index.js
+```javascript
+bot.start((ctx) => {
+  ctx.reply('Welcome!', {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: 'Открыть приложение',
+        web_app: { url: process.env.WEB_APP_URL }
+      }]]
+    }
+  });
+});
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Backend крашится
+- Проверить DATABASE_URL
+- Запустить `npx prisma generate`
+- Проверить JWT_SECRET
+
+### Frontend не загружается
+- Проверить BACKEND_URL
+- Проверить CORS в backend
+
+### Bot не отвечает
+- Проверить BOT_TOKEN
+- Проверить логи Railway
+
+---
+
+## 📊 Масштабируемость
+
+- **Микросервисы:** Каждый компонент отдельно
+- **База данных:** PostgreSQL с индексами
+- **Кэширование:** Можно добавить Redis
+- **CDN:** Vercel автоматически
+- **Мониторинг:** Railway предоставляет метрики
+
+---
+
+## 🎯 Следующие шаги для развития
+
+1. **Платежи:** Интеграция с Stripe/PayPal
+2. **Уведомления:** Push notifications
+3. **Чат:** Реализовать messages API
+4. **Админка:** Панель управления
+5. **Аналитика:** Метрики использования
+
+---
+
+**Проект готов к production!** 🚀
+
+Создано: 22 марта 2026
+Версия: 1.0.0
