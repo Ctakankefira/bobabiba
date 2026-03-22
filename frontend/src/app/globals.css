@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6efe6;
+  --foreground: #1d1b18;
+  --surface: rgba(255, 251, 247, 0.82);
+  --surface-strong: #fffaf4;
+  --line: rgba(78, 54, 31, 0.12);
+  --accent: #cf5f2e;
+  --accent-soft: #f6c39d;
+  --muted: #6b6258;
 }
 
 @theme inline {
@@ -12,15 +18,56 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(255, 220, 186, 0.95), transparent 32%),
+    radial-gradient(circle at top right, rgba(244, 163, 97, 0.22), transparent 26%),
+    linear-gradient(180deg, #fdf6ee 0%, #f5ecdf 52%, #efe1d0 100%);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(207, 95, 46, 0.22);
+}
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 60px rgba(76, 50, 29, 0.08);
+}
+
+.fade-up {
+  animation: fadeUp 0.55s ease-out both;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

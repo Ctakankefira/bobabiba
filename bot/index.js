@@ -1,51 +1,51 @@
 const { Telegraf } = require('telegraf');
-const axios = require('axios');
+
+if (!process.env.BOT_TOKEN) {
+  throw new Error('BOT_TOKEN is required');
+}
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-bot.start((ctx) => {
-  ctx.reply('Добро пожаловать в Маркетплейс Мастеров!', {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'Открыть приложение', web_app: { url: process.env.WEB_APP_URL } }]
-      ]
-    }
-  });
-});
-
-bot.command('profile', async (ctx) => {
-  const telegramId = ctx.from.id;
-  try {
-    // Предполагаем, что токен хранится в сессии или базе, но для простоты используем заглушку
-    const response = await axios.get(`${process.env.BACKEND_URL}/users/profile`, {
-      headers: { Authorization: `Bearer ${process.env.JWT_TOKEN}` } // Нужно реализовать аутентификацию
-    });
-    ctx.reply(`Ваш профиль: ${JSON.stringify(response.data)}`);
-  } catch (e) {
-    ctx.reply('Пожалуйста, войдите через приложение');
-  }
-});
-
-bot.command('my_bookings', async (ctx) => {
-  const telegramId = ctx.from.id;
-  try {
-    const response = await axios.get(`${process.env.BACKEND_URL}/bookings`, {
-      headers: { Authorization: `Bearer ${process.env.JWT_TOKEN}` }
-    });
-    ctx.reply(`Ваши записи: ${JSON.stringify(response.data)}`);
-  } catch (e) {
-    ctx.reply('Ошибка получения записей');
-  }
-});
-
-// Функция для отправки уведомлений
-async function sendNotification(chatId, message) {
-  await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
-    chat_id: chatId,
-    text: message
-  });
+function getAppUrl() {
+  return process.env.WEB_APP_URL || 'https://example.com';
 }
 
-module.exports = { sendNotification };
+bot.start((ctx) => {
+  ctx.reply('Добро пожаловать в маркетплейс мастеров.', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'Открыть приложение', web_app: { url: getAppUrl() } }],
+      ],
+    },
+  });
+});
+
+bot.command('app', (ctx) => {
+  ctx.reply('Открываю Mini App.', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'Перейти в каталог', web_app: { url: getAppUrl() } }],
+      ],
+    },
+  });
+});
+
+bot.command('help', (ctx) => {
+  ctx.reply(
+    [
+      'Команды:',
+      '/start - приветствие и кнопка входа',
+      '/app - открыть приложение',
+      '/help - список команд',
+    ].join('\n'),
+  );
+});
+
+bot.catch((error) => {
+  console.error('Bot error:', error);
+});
 
 bot.launch();
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
