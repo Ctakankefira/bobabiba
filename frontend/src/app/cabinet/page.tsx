@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -9,7 +9,13 @@ type ViewerProfile = {
   age?: number | null;
   clientRatingAverage?: number | null;
   role: "CLIENT" | "MASTER";
-  master?: { id: string } | null;
+};
+
+type Service = {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
 };
 
 type Booking = {
@@ -21,7 +27,7 @@ type Booking = {
   clientRatingComment?: string | null;
   acceptedAt?: string | null;
   completedAt?: string | null;
-  service: { id: string; name: string; price: number; duration: number };
+  service: Service;
   master: { id: string; name: string };
   client: { id: string; displayName?: string | null; username?: string | null };
   review?: { id: string; rating: number; comment?: string | null } | null;
@@ -34,7 +40,7 @@ type MasterProfile = {
   category: string;
   priceMin: number | null;
   priceMax: number | null;
-  services: Array<{ id: string; name: string; price: number; duration: number }>;
+  services: Service[];
   photos: Array<{ id: string; url: string; alt: string | null }>;
   bookings: Booking[];
 };
@@ -46,27 +52,22 @@ declare global {
         ready: () => void;
         expand: () => void;
         initData?: string;
-        initDataUnsafe?: {
-          user?: {
-            first_name?: string;
-          };
-        };
+        initDataUnsafe?: { user?: { first_name?: string } };
       };
     };
   }
 }
 
 const ROLE_CHOICE_PREFIX = "role-choice:";
+const MASTER_CATEGORIES = ["Барберы", "Маникюр", "Брови", "Массаж", "Тату"];
 
-const fDate = (v?: string | null) =>
-  v
-    ? new Date(v).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
-    : "Не указано";
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" }) : "Не указано";
 
-const clientName = (b: Booking) => b.client.displayName || b.client.username || "Клиент";
+const bookingClientName = (booking: Booking) => booking.client.displayName || booking.client.username || "Клиент";
 
-const statusLabel = (s: Booking["status"]) =>
-  ({ PENDING: "Новая заявка", CONFIRMED: "В работе", CANCELLED: "Отменена", COMPLETED: "Завершена" })[s];
+const bookingStatusLabel = (status: Booking["status"]) =>
+  ({ PENDING: "Новая заявка", CONFIRMED: "В работе", CANCELLED: "Отменена", COMPLETED: "Завершена" })[status];
 
 const parseServices = (input: string) =>
   input
@@ -97,20 +98,21 @@ export default function CabinetPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profileEdit, setProfileEdit] = useState(false);
-  const [masterView, setMasterView] = useState<"overview" | "edit" | "stats">("overview");
+  const [profileSaving, setProfileSaving] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileAge, setProfileAge] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
+  const [masterTab, setMasterTab] = useState<"overview" | "services" | "stats">("overview");
+  const [masterEditing, setMasterEditing] = useState(false);
+  const [masterSaving, setMasterSaving] = useState(false);
   const [masterForm, setMasterForm] = useState({
     name: "",
     description: "",
-    category: "",
+    category: MASTER_CATEGORIES[0],
     priceMin: "",
     priceMax: "",
-    services: "",
     photos: "",
+    services: "",
   });
-  const [masterSaving, setMasterSaving] = useState(false);
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
@@ -120,14 +122,8 @@ export default function CabinetPage() {
   const [clientRateComment, setClientRateComment] = useState("");
   const [clientRateSaving, setClientRateSaving] = useState(false);
 
-  const examples = useMemo(
-    () => ({
-      services: "Стрижка|1500|60|Мужская стрижка\nБритье|900|30|Опасная бритва",
-      photos: "https://example.com/photo-1.jpg|Фото профиля\nhttps://example.com/photo-2.jpg|Рабочее место",
-    }),
-    [],
-  );
-
+  const serviceExample = useMemo(() => "Стрижка|1500|60|Мужская стрижка\nБритье|900|30|Опасная бритва", []);
+  const photoExample = useMemo(() => "https://example.com/photo-1.jpg|Фото профиля\nhttps://example.com/photo-2.jpg|Рабочее место", []);
   useEffect(() => {
     window.Telegram?.WebApp?.ready();
     window.Telegram?.WebApp?.expand();
@@ -138,6 +134,7 @@ export default function CabinetPage() {
         setLoading(false);
         return;
       }
+
       try {
         const authRes = await fetch("/api/auth/telegram", {
           method: "POST",
@@ -152,13 +149,17 @@ export default function CabinetPage() {
           fetch("/api/users/profile", { headers: { Authorization: `Bearer ${auth.access_token}` } }),
           fetch("/api/bookings", { headers: { Authorization: `Bearer ${auth.access_token}` } }),
         ]);
+
         if (!profileRes.ok) throw new Error("Не удалось загрузить профиль");
         const profile = (await profileRes.json()) as ViewerProfile;
         setViewer(profile);
         setProfileName(profile.displayName ?? "");
         setProfileAge(profile.age?.toString() ?? "");
         setProfileEdit(!profile.displayName);
-        if (bookingsRes.ok) setBookings((await bookingsRes.json()) as Booking[]);
+
+        if (bookingsRes.ok) {
+          setBookings((await bookingsRes.json()) as Booking[]);
+        }
 
         if (profile.role === "MASTER") {
           const masterRes = await fetch("/api/masters/me", {
@@ -171,17 +172,17 @@ export default function CabinetPage() {
               setMasterForm({
                 name: data.name ?? "",
                 description: data.description ?? "",
-                category: data.category ?? "",
+                category: data.category || MASTER_CATEGORIES[0],
                 priceMin: data.priceMin?.toString() ?? "",
                 priceMax: data.priceMax?.toString() ?? "",
-                services: data.services.map((s) => [s.name, s.price, s.duration, ""].join("|")).join("\n"),
-                photos: data.photos.map((p) => [p.url, p.alt ?? ""].join("|")).join("\n"),
+                photos: data.photos.map((photo) => [photo.url, photo.alt ?? ""].join("|")).join("\n"),
+                services: data.services.map((service) => [service.name, service.price, service.duration, ""].join("|")).join("\n"),
               });
             }
           }
         }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Ошибка загрузки кабинета");
+      } catch (bootstrapError) {
+        setError(bootstrapError instanceof Error ? bootstrapError.message : "Ошибка загрузки кабинета");
       } finally {
         setLoading(false);
       }
@@ -190,29 +191,30 @@ export default function CabinetPage() {
     bootstrap();
   }, []);
 
-  const active = bookings.filter((b) => ["PENDING", "CONFIRMED"].includes(b.status));
-  const history = bookings.filter((b) => ["CANCELLED", "COMPLETED"].includes(b.status));
-  const pendingReview = bookings.find((b) => b.status === "COMPLETED" && !b.review);
-  const stats = {
-    pending: bookings.filter((b) => b.status === "PENDING"),
-    progress: bookings.filter((b) => b.status === "CONFIRMED"),
-    done: bookings.filter((b) => b.status === "COMPLETED"),
-  };
-
   useEffect(() => {
+    const pendingReview = bookings.find((booking) => booking.status === "COMPLETED" && !booking.review);
     if (viewer?.role === "CLIENT" && pendingReview && !reviewBookingId) {
       setReviewBookingId(pendingReview.id);
       setReviewRating(5);
       setReviewComment("");
     }
-  }, [pendingReview, reviewBookingId, viewer?.role]);
+  }, [bookings, reviewBookingId, viewer?.role]);
 
-  const updateBooking = (next: Booking) => {
-    setBookings((current) => current.map((b) => (b.id === next.id ? next : b)));
+  const syncBooking = (updated: Booking) => {
+    setBookings((current) => current.map((booking) => (booking.id === updated.id ? updated : booking)));
     setMaster((current) =>
-      current ? { ...current, bookings: current.bookings.map((b) => (b.id === next.id ? next : b)) } : current,
+      current
+        ? { ...current, bookings: current.bookings.map((booking) => (booking.id === updated.id ? updated : booking)) }
+        : current,
     );
   };
+
+  const newRequests = bookings.filter((booking) => booking.status === "PENDING");
+  const statsColumns = [
+    { title: "Новые заявки", items: bookings.filter((booking) => booking.status === "PENDING") },
+    { title: "В работе", items: bookings.filter((booking) => booking.status === "CONFIRMED") },
+    { title: "Завершенные", items: bookings.filter((booking) => booking.status === "COMPLETED") },
+  ];
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -230,9 +232,9 @@ export default function CabinetPage() {
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить профиль");
       setViewer(data);
       setProfileEdit(false);
-      setMessage("Личный профиль обновлён.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить профиль");
+      setMessage("Личный профиль обновлен.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Не удалось сохранить профиль");
     } finally {
       setProfileSaving(false);
     }
@@ -254,34 +256,22 @@ export default function CabinetPage() {
           category: masterForm.category,
           priceMin: masterForm.priceMin ? Number(masterForm.priceMin) : undefined,
           priceMax: masterForm.priceMax ? Number(masterForm.priceMax) : undefined,
-          services: parseServices(masterForm.services),
           photos: parsePhotos(masterForm.photos),
+          services: parseServices(masterForm.services),
         }),
       });
       const data = (await res.json()) as MasterProfile & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить профиль мастера");
       setMaster(data);
       setBookings(data.bookings ?? bookings);
-      setMasterView("overview");
-      setMessage("Профиль мастера обновлён.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить профиль мастера");
+      setMasterEditing(false);
+      setMessage(masterTab === "services" ? "Услуги обновлены." : "Профиль мастера обновлен.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Не удалось сохранить профиль мастера");
     } finally {
       setMasterSaving(false);
     }
   }
-
-  function leaveCabinet() {
-    window.location.href = "/";
-  }
-
-  function changeRole() {
-    if (viewer) {
-      window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewer.id}`);
-    }
-    window.location.href = "/?pickRole=1";
-  }
-
   async function updateStatus(bookingId: string, status: "CONFIRMED" | "CANCELLED" | "COMPLETED") {
     if (!authToken) return;
     setMessage(null);
@@ -294,10 +284,10 @@ export default function CabinetPage() {
       });
       const data = (await res.json()) as Booking & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось обновить статус");
-      updateBooking(data);
-      setMessage("Статус записи обновлён.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось обновить статус");
+      syncBooking(data);
+      setMessage("Статус записи обновлен.");
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : "Не удалось обновить статус");
     }
   }
 
@@ -314,13 +304,13 @@ export default function CabinetPage() {
       });
       const data = (await res.json()) as Booking & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось сохранить оценку клиента");
-      updateBooking(data);
+      syncBooking(data);
       setClientRateBookingId(null);
-      setClientRateComment("");
       setClientRateValue(5);
+      setClientRateComment("");
       setMessage("Оценка клиента сохранена.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить оценку клиента");
+    } catch (rateError) {
+      setError(rateError instanceof Error ? rateError.message : "Не удалось сохранить оценку клиента");
     } finally {
       setClientRateSaving(false);
     }
@@ -339,20 +329,24 @@ export default function CabinetPage() {
       });
       const data = (await res.json()) as Booking & { error?: string };
       if (!res.ok) throw new Error(data.error || "Не удалось отправить отзыв");
-      updateBooking(data);
+      syncBooking(data);
       setReviewBookingId(null);
-      setReviewComment("");
       setReviewRating(5);
-      setMessage("Спасибо! Ваш отзыв сохранён.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось отправить отзыв");
+      setReviewComment("");
+      setMessage("Спасибо! Ваш отзыв сохранен.");
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Не удалось отправить отзыв");
     } finally {
       setReviewSaving(false);
     }
   }
 
   if (loading) {
-    return <main className="mx-auto flex min-h-screen w-full max-w-6xl px-4 py-6 sm:px-6"><div className="glass h-96 w-full animate-pulse rounded-[32px]" /></main>;
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-6xl px-4 py-6 sm:px-6">
+        <div className="glass h-96 w-full animate-pulse rounded-[32px]" />
+      </main>
+    );
   }
 
   return (
@@ -390,7 +384,7 @@ export default function CabinetPage() {
               ))}
             </div>
             <textarea value={clientRateComment} onChange={(event) => setClientRateComment(event.target.value)} className="mt-5 min-h-28 w-full rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" placeholder="Комментарий мастера о клиенте" />
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 flex gap-3">
               <button type="button" onClick={submitClientRating} disabled={clientRateSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">
                 {clientRateSaving ? "Сохраняю..." : "Сохранить оценку"}
               </button>
@@ -408,13 +402,19 @@ export default function CabinetPage() {
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
           {viewer?.displayName ? `Профиль: ${viewer.displayName}${viewer.username ? ` • @${viewer.username}` : ""}` : "Заполните имя и возраст в личном профиле."}
         </p>
+
         <div className="mt-5 flex flex-wrap gap-3">
-          <button type="button" onClick={leaveCabinet} className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm text-white">Выйти в каталог</button>
-          <button type="button" onClick={changeRole} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Сменить роль</button>
+          <button type="button" onClick={() => (window.location.href = "/")} className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm text-white">
+            Выйти в каталог
+          </button>
+          <button type="button" onClick={() => { if (viewer) window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewer.id}`); window.location.href = "/?pickRole=1"; }} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
+            Сменить роль
+          </button>
           <button type="button" onClick={() => setProfileEdit((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
-            {profileEdit ? "Скрыть редактирование" : "Изменить личный профиль"}
+            {profileEdit ? "Скрыть личный профиль" : "Изменить личный профиль"}
           </button>
         </div>
+
         {message ? <p className="mt-4 text-sm text-green-700">{message}</p> : null}
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
@@ -429,58 +429,71 @@ export default function CabinetPage() {
             </button>
           </form>
         ) : null}
-
         {viewer?.role === "MASTER" ? (
           <div className="mt-8 space-y-6">
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={() => setMasterView("overview")} className={`rounded-full px-4 py-2 text-sm ${masterView === "overview" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Профиль мастера</button>
-              <button type="button" onClick={() => setMasterView("edit")} className={`rounded-full px-4 py-2 text-sm ${masterView === "edit" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Изменить профиль</button>
-              <button type="button" onClick={() => setMasterView("stats")} className={`rounded-full px-4 py-2 text-sm ${masterView === "stats" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Статистика</button>
+              <button type="button" onClick={() => setMasterTab("overview")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "overview" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Профиль мастера</button>
+              <button type="button" onClick={() => setMasterTab("services")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "services" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Услуги</button>
+              <button type="button" onClick={() => setMasterTab("stats")} className={`rounded-full px-4 py-2 text-sm ${masterTab === "stats" ? "bg-[var(--accent)] text-white" : "border border-[var(--line)] bg-white/80"}`}>Статистика</button>
             </div>
 
-            {masterView === "edit" ? (
-              <form className="grid gap-4 rounded-[28px] border border-[var(--line)] bg-white/60 p-5" onSubmit={saveMaster}>
-                <input required value={masterForm.name} onChange={(event) => setMasterForm((c) => ({ ...c, name: event.target.value }))} placeholder="Имя мастера" className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
-                <div className="grid gap-4 md:grid-cols-3">
-                  <input required value={masterForm.category} onChange={(event) => setMasterForm((c) => ({ ...c, category: event.target.value }))} placeholder="Категория" className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
-                  <input value={masterForm.priceMin} onChange={(event) => setMasterForm((c) => ({ ...c, priceMin: event.target.value }))} placeholder="Цена от" className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
-                  <input value={masterForm.priceMax} onChange={(event) => setMasterForm((c) => ({ ...c, priceMax: event.target.value }))} placeholder="Цена до" className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
-                </div>
-                <textarea value={masterForm.description} onChange={(event) => setMasterForm((c) => ({ ...c, description: event.target.value }))} placeholder="Описание" className="min-h-28 rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
-                <textarea value={masterForm.services} onChange={(event) => setMasterForm((c) => ({ ...c, services: event.target.value }))} placeholder={examples.services} className="min-h-32 rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 font-mono text-sm outline-none" />
-                <textarea value={masterForm.photos} onChange={(event) => setMasterForm((c) => ({ ...c, photos: event.target.value }))} placeholder={examples.photos} className="min-h-28 rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 font-mono text-sm outline-none" />
-                <button type="submit" disabled={masterSaving} className="w-fit rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">
-                  {masterSaving ? "Сохраняю..." : "Сохранить профиль мастера"}
-                </button>
-              </form>
-            ) : null}
-
-            {masterView === "overview" ? (
-              <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-                <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-                  <h2 className="text-xl font-semibold">Профиль мастера</h2>
-                  <div className="mt-4 grid gap-3">
-                    <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Имя</p><p className="mt-2 text-lg font-semibold">{master?.name || "Не заполнено"}</p></article>
-                    <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Категория</p><p className="mt-2 text-lg font-semibold">{master?.category || "Не заполнено"}</p></article>
-                    <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Услуг</p><p className="mt-2 text-lg font-semibold">{master?.services.length || 0}</p></article>
+            {masterTab === "overview" ? (
+              <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
+                <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Профиль мастера</p>
+                      <h2 className="mt-3 text-2xl font-semibold">{master?.name || "Профиль мастера"}</h2>
+                    </div>
+                    <button type="button" onClick={() => setMasterEditing((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
+                      {masterEditing ? "Скрыть редактирование" : "Изменить профиль"}
+                    </button>
                   </div>
+
+                  {masterEditing ? (
+                    <form className="mt-6 space-y-4" onSubmit={saveMaster}>
+                      <input value={masterForm.name} onChange={(event) => setMasterForm((current) => ({ ...current, name: event.target.value }))} placeholder="Имя мастера" className="w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <select value={masterForm.category} onChange={(event) => setMasterForm((current) => ({ ...current, category: event.target.value }))} className="rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none">
+                          {MASTER_CATEGORIES.map((category) => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                        <input type="number" min={0} value={masterForm.priceMin} onChange={(event) => setMasterForm((current) => ({ ...current, priceMin: event.target.value }))} placeholder="Цена от" className="rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                        <input type="number" min={0} value={masterForm.priceMax} onChange={(event) => setMasterForm((current) => ({ ...current, priceMax: event.target.value }))} placeholder="Цена до" className="rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                      </div>
+                      <textarea value={masterForm.description} onChange={(event) => setMasterForm((current) => ({ ...current, description: event.target.value }))} placeholder="Описание" className="min-h-32 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                      <textarea value={masterForm.photos} onChange={(event) => setMasterForm((current) => ({ ...current, photos: event.target.value }))} placeholder={photoExample} className="min-h-28 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                      <button type="submit" disabled={masterSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">{masterSaving ? "Сохраняю..." : "Сохранить профиль мастера"}</button>
+                    </form>
+                  ) : (
+                    <div className="mt-6 grid gap-4">
+                      <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Имя</p><p className="mt-3 text-2xl font-semibold">{master?.name || "Не заполнено"}</p></article>
+                      <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Категория</p><p className="mt-3 text-xl font-medium">{master?.category || "Не выбрана"}</p></article>
+                      <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Бюджет</p><p className="mt-3 text-xl font-medium">{master?.priceMin ?? "—"} - {master?.priceMax ?? "—"} ₽</p></article>
+                      <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Описание</p><p className="mt-3 text-sm leading-6 text-[var(--muted)]">{master?.description || "Пока без описания."}</p></article>
+                    </div>
+                  )}
                 </section>
-                <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-                  <h2 className="text-xl font-semibold">Заявки</h2>
-                  <div className="mt-4 grid gap-3">
-                    {bookings.length === 0 ? <p className="text-sm text-[var(--muted)]">Пока никто не записался.</p> : bookings.map((booking) => (
-                      <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
-                        <div className="flex items-center justify-between gap-3"><strong>{booking.service.name}</strong><span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">{statusLabel(booking.status)}</span></div>
-                        <p className="mt-2 text-sm text-[var(--muted)]">Клиент: {clientName(booking)}</p>
-                        <p className="mt-1 text-sm text-[var(--muted)]">Запись на: {fDate(booking.date)}</p>
-                        {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {booking.status === "PENDING" ? <button type="button" onClick={() => updateStatus(booking.id, "CONFIRMED")} className="rounded-full border border-[var(--line)] px-3 py-2 text-xs">Взять в работу</button> : null}
-                          {booking.status === "CONFIRMED" ? <button type="button" onClick={() => updateStatus(booking.id, "COMPLETED")} className="rounded-full border border-[var(--line)] px-3 py-2 text-xs">Завершить</button> : null}
-                          {!["CANCELLED", "COMPLETED"].includes(booking.status) ? <button type="button" onClick={() => updateStatus(booking.id, "CANCELLED")} className="rounded-full border border-[var(--line)] px-3 py-2 text-xs">Отменить</button> : null}
-                          {booking.status === "COMPLETED" && !booking.clientRating ? <button type="button" onClick={() => { setClientRateBookingId(booking.id); setClientRateValue(5); setClientRateComment(""); }} className="rounded-full bg-[var(--accent)] px-3 py-2 text-xs text-white">Оценить клиента</button> : null}
+
+                <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+                  <div className="flex items-center justify-between gap-3"><div><p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Заявки</p><h2 className="mt-3 text-2xl font-semibold">Новые заявки</h2></div><span className="rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs text-[var(--muted)]">{newRequests.length}</span></div>
+                  <div className="mt-6 space-y-4">
+                    {newRequests.length === 0 ? <article className="rounded-3xl border border-dashed border-[var(--line)] bg-white/75 p-5 text-sm text-[var(--muted)]">Новых заявок пока нет.</article> : newRequests.map((booking) => (
+                      <article key={booking.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h3 className="text-lg font-semibold">{booking.service.name}</h3>
+                            <p className="mt-2 text-sm text-[var(--muted)]">Клиент: {bookingClientName(booking)}</p>
+                            <p className="mt-1 text-sm text-[var(--muted)]">Запись на: {formatDate(booking.date)}</p>
+                            {booking.notes ? <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{booking.notes}</p> : null}
+                          </div>
+                          <span className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">{bookingStatusLabel(booking.status)}</span>
                         </div>
-                        {booking.clientRating ? <p className="mt-3 text-sm text-[var(--muted)]">Оценка клиента: {booking.clientRating}/5{booking.clientRatingComment ? ` • ${booking.clientRatingComment}` : ""}</p> : null}
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <button type="button" onClick={() => updateStatus(booking.id, "CONFIRMED")} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Взять в работу</button>
+                          <button type="button" onClick={() => updateStatus(booking.id, "CANCELLED")} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Отменить</button>
+                        </div>
                       </article>
                     ))}
                   </div>
@@ -488,68 +501,78 @@ export default function CabinetPage() {
               </div>
             ) : null}
 
-            {masterView === "stats" ? (
-              <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-                <h2 className="text-xl font-semibold">Статистика по заказам</h2>
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                  {[{ title: "Новые заявки", items: stats.pending }, { title: "В работе", items: stats.progress }, { title: "Завершённые", items: stats.done }].map((column) => (
-                    <section key={column.title} className="rounded-2xl bg-white/80 p-4">
-                      <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">{column.title}</h3><span className="rounded-full bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">{column.items.length}</span></div>
-                      <div className="mt-4 grid gap-3">
-                        {column.items.length === 0 ? <p className="text-sm text-[var(--muted)]">Пока пусто.</p> : column.items.map((booking) => (
-                          <article key={booking.id} className="rounded-2xl border border-[var(--line)] bg-white p-4">
-                            <strong>{clientName(booking)}</strong>
-                            <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
-                            <p className="mt-1 text-sm text-[var(--muted)]">Заказан слот: {fDate(booking.date)}</p>
-                            <p className="mt-1 text-sm text-[var(--muted)]">Взято в работу: {fDate(booking.acceptedAt)}</p>
-                            <p className="mt-1 text-sm text-[var(--muted)]">Завершено: {fDate(booking.completedAt)}</p>
+            {masterTab === "services" ? (
+              <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+                <div className="flex items-center justify-between gap-4"><div><p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Услуги</p><h2 className="mt-3 text-2xl font-semibold">Управление услугами</h2></div><span className="rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs text-[var(--muted)]">{master?.services.length ?? 0} услуг</span></div>
+                <form className="mt-6 space-y-4" onSubmit={saveMaster}>
+                  <textarea value={masterForm.services} onChange={(event) => setMasterForm((current) => ({ ...current, services: event.target.value }))} placeholder={serviceExample} className="min-h-40 w-full rounded-2xl border border-[var(--line)] bg-white/85 px-4 py-3 outline-none" />
+                  <p className="text-sm text-[var(--muted)]">Одна услуга на строку: Название|Цена|Длительность|Описание</p>
+                  <button type="submit" disabled={masterSaving} className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white disabled:opacity-60">{masterSaving ? "Сохраняю..." : "Сохранить услуги"}</button>
+                </form>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  {(master?.services ?? []).map((service) => (
+                    <article key={service.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-5"><div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">{service.name}</h3><span className="text-sm text-[var(--muted)]">{service.duration} мин</span></div><p className="mt-3 text-sm text-[var(--muted)]">{service.price} ₽</p></article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {masterTab === "stats" ? (
+              <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+                <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Статистика</p>
+                <h2 className="mt-3 text-2xl font-semibold">Работа по заявкам</h2>
+                <div className="mt-6 grid gap-5 lg:grid-cols-3">
+                  {statsColumns.map((column) => (
+                    <div key={column.title} className="rounded-3xl border border-[var(--line)] bg-white/80 p-4">
+                      <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">{column.title}</h3><span className="rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--muted)]">{column.items.length}</span></div>
+                      <div className="mt-4 space-y-3">
+                        {column.items.length === 0 ? <article className="rounded-3xl border border-dashed border-[var(--line)] bg-white/75 p-4 text-sm text-[var(--muted)]">Пока пусто.</article> : column.items.map((booking) => (
+                          <article key={booking.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-4 text-sm">
+                            <h4 className="font-semibold">{booking.service.name}</h4>
+                            <p className="mt-2 text-[var(--muted)]">Клиент: {bookingClientName(booking)}</p>
+                            <p className="mt-1 text-[var(--muted)]">Создана: {formatDate(booking.date)}</p>
+                            <p className="mt-1 text-[var(--muted)]">Взята в работу: {formatDate(booking.acceptedAt)}</p>
+                            <p className="mt-1 text-[var(--muted)]">Завершена: {formatDate(booking.completedAt)}</p>
+                            {booking.clientRating ? <p className="mt-2 text-[var(--muted)]">Оценка клиента: {booking.clientRating}/5</p> : null}
+                            {booking.status === "CONFIRMED" ? <button type="button" onClick={() => updateStatus(booking.id, "COMPLETED")} className="mt-4 rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Завершить услугу</button> : null}
+                            {booking.status === "COMPLETED" && booking.clientRating == null ? <button type="button" onClick={() => setClientRateBookingId(booking.id)} className="mt-4 rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Оценить клиента</button> : null}
                           </article>
                         ))}
                       </div>
-                    </section>
+                    </div>
                   ))}
                 </div>
               </section>
             ) : null}
           </div>
         ) : (
-          <div className="mt-8 space-y-6">
-            <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-              <h2 className="text-xl font-semibold">Мой профиль</h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Имя</p><p className="mt-2 text-lg font-semibold">{viewer?.displayName || "Не заполнено"}</p></article>
-                <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Возраст</p><p className="mt-2 text-lg font-semibold">{viewer?.age ?? "Не указан"}</p></article>
-                <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Рейтинг клиента</p><p className="mt-2 text-lg font-semibold">{(viewer?.clientRatingAverage ?? 0).toFixed(1)} / 5</p></article>
-                <article className="rounded-2xl bg-white/80 p-4"><p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Всего записей</p><p className="mt-2 text-lg font-semibold">{bookings.length}</p></article>
+          <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+              <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Мой профиль</p>
+              <div className="mt-5 space-y-4">
+                <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Имя</p><p className="mt-3 text-2xl font-semibold">{viewer?.displayName || "Не заполнено"}</p></article>
+                <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Возраст</p><p className="mt-3 text-2xl font-semibold">{viewer?.age ?? "—"}</p></article>
+                <article className="rounded-3xl border border-[var(--line)] bg-white/80 p-5"><p className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Рейтинг клиента</p><p className="mt-3 text-2xl font-semibold">{viewer?.clientRatingAverage?.toFixed(1) ?? "0.0"} ★</p></article>
               </div>
             </section>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-                <h2 className="text-xl font-semibold">Текущие записи</h2>
-                <div className="mt-4 grid gap-3">
-                  {active.length === 0 ? <p className="text-sm text-[var(--muted)]">У вас пока нет активных записей.</p> : active.map((booking) => (
-                    <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
-                      <div className="flex items-center justify-between gap-3"><strong>{booking.master.name}</strong><span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">{statusLabel(booking.status)}</span></div>
-                      <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
-                      <p className="mt-1 text-sm text-[var(--muted)]">{fDate(booking.date)}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-              <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-                <h2 className="text-xl font-semibold">История</h2>
-                <div className="mt-4 grid gap-3">
-                  {history.length === 0 ? <p className="text-sm text-[var(--muted)]">Завершённые и отменённые записи появятся здесь.</p> : history.map((booking) => (
-                    <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
-                      <div className="flex items-center justify-between gap-3"><strong>{booking.master.name}</strong><span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">{statusLabel(booking.status)}</span></div>
-                      <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
-                      <p className="mt-1 text-sm text-[var(--muted)]">{fDate(booking.date)}</p>
-                      {booking.review ? <p className="mt-2 text-sm text-[var(--muted)]">Ваш отзыв: {booking.review.rating}/5{booking.review.comment ? ` • ${booking.review.comment}` : ""}</p> : null}
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </div>
+            <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
+              <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Мои записи</p>
+              <div className="mt-5 space-y-4">
+                {bookings.length === 0 ? <article className="rounded-3xl border border-dashed border-[var(--line)] bg-white/75 p-5 text-sm text-[var(--muted)]">У вас пока нет записей.</article> : bookings.map((booking) => (
+                  <article key={booking.id} className="rounded-3xl border border-[var(--line)] bg-white/85 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{booking.master.name}</h3>
+                        <p className="mt-2 text-sm text-[var(--muted)]">Услуга: {booking.service.name}</p>
+                        <p className="mt-1 text-sm text-[var(--muted)]">Дата: {formatDate(booking.date)}</p>
+                      </div>
+                      <span className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">{bookingStatusLabel(booking.status)}</span>
+                    </div>
+                    {booking.notes ? <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{booking.notes}</p> : null}
+                    {booking.status === "COMPLETED" && !booking.review ? <button type="button" onClick={() => setReviewBookingId(booking.id)} className="mt-4 rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">Оценить мастера</button> : null}
+                  </article>
+                ))}
+              </div>
+            </section>
           </div>
         )}
       </section>
