@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BookingsService } from './bookings.service';
 
@@ -36,6 +36,16 @@ class UpdateBookingStatusDto {
   status!: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
 }
 
+class RateClientDto {
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}
+
 @Controller('bookings')
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
@@ -54,5 +64,14 @@ export class BookingsController {
   @Patch(':id/status')
   updateStatus(@Request() req, @Param('id') id: string, @Body() body: UpdateBookingStatusDto) {
     return this.bookingsService.updateStatus(req.user.userId, id, body.status);
+  }
+
+  @Patch(':id/client-rating')
+  rateClient(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: RateClientDto,
+  ) {
+    return this.bookingsService.rateClient(req.user.userId, id, body.rating, body.comment);
   }
 }

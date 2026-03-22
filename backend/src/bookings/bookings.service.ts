@@ -118,4 +118,49 @@ export class BookingsService {
       },
     });
   }
+
+  async rateClient(
+    userId: string,
+    bookingId: string,
+    rating: number,
+    comment?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { master: true },
+    });
+
+    if (!user?.master) {
+      throw new ForbiddenException('Only masters can rate clients');
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.masterId !== user.master.id) {
+      throw new ForbiddenException('Booking does not belong to this master');
+    }
+
+    if (booking.status !== 'COMPLETED') {
+      throw new ForbiddenException('Client can be rated only after a completed booking');
+    }
+
+    return this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        clientRating: rating,
+        clientRatingComment: comment,
+      },
+      include: {
+        client: true,
+        service: true,
+        master: true,
+      },
+    });
+  }
 }

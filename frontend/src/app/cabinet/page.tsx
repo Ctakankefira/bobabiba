@@ -27,6 +27,8 @@ type Booking = {
   date: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
   notes: string | null;
+  clientRating?: number | null;
+  clientRatingComment?: string | null;
   service: {
     id: string;
     name: string;
@@ -128,6 +130,7 @@ export default function CabinetPage() {
   const [servicesInput, setServicesInput] = useState("");
   const [photosInput, setPhotosInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [ratingSavingId, setRatingSavingId] = useState<string | null>(null);
 
   const examples = useMemo(
     () => ({
@@ -147,6 +150,13 @@ export default function CabinetPage() {
     }
     window.location.href = "/?pickRole=1";
   }
+
+  const activeBookings = bookings.filter((booking) =>
+    ["PENDING", "CONFIRMED"].includes(booking.status),
+  );
+  const historyBookings = bookings.filter((booking) =>
+    ["CANCELLED", "COMPLETED"].includes(booking.status),
+  );
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -316,6 +326,45 @@ export default function CabinetPage() {
     }
   }
 
+  async function rateClient(bookingId: string, rating: number) {
+    if (!authToken) return;
+
+    setRatingSavingId(bookingId);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}/client-rating`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ rating }),
+      });
+
+      const data = (await response.json()) as Booking & { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "Не удалось оценить клиента");
+      }
+
+      setBookings((current) => current.map((booking) => (booking.id === bookingId ? data : booking)));
+      setMasterProfile((current) =>
+        current
+          ? {
+              ...current,
+              bookings: current.bookings.map((booking) => (booking.id === bookingId ? data : booking)),
+            }
+          : current,
+      );
+      setMessage("Оценка клиента сохранена.");
+    } catch (ratingError) {
+      setError(ratingError instanceof Error ? ratingError.message : "Не удалось оценить клиента");
+    } finally {
+      setRatingSavingId(null);
+    }
+  }
+
   if (loading) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6">
@@ -453,6 +502,9 @@ export default function CabinetPage() {
                       </p>
                       <p className="mt-1 text-sm text-[var(--muted)]">{formatDate(booking.date)}</p>
                       {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
+                      {booking.clientRating ? (
+                        <p className="mt-2 text-sm text-[var(--muted)]">Оценка клиента: {booking.clientRating}/5</p>
+                      ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -476,6 +528,26 @@ export default function CabinetPage() {
                           Завершить
                         </button>
                       </div>
+                      {booking.status === "COMPLETED" ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-[var(--muted)]">Оценить клиента:</span>
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => rateClient(booking.id, value)}
+                              disabled={ratingSavingId === booking.id}
+                              className={`rounded-full px-3 py-1 text-xs transition ${
+                                booking.clientRating === value
+                                  ? "bg-[var(--accent)] text-white"
+                                  : "border border-[var(--line)] bg-white"
+                              } disabled:opacity-60`}
+                            >
+                              {value}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </article>
                   ))
                 )}
@@ -483,30 +555,55 @@ export default function CabinetPage() {
             </section>
           </div>
         ) : (
-          <section className="mt-8 rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
-            <h2 className="text-xl font-semibold">Мои записи</h2>
-            <div className="mt-4 grid gap-3">
-              {bookings.length === 0 ? (
-                <p className="text-sm text-[var(--muted)]">
-                  У вас пока нет записей. Откройте каталог на главной странице и запишитесь к мастеру.
-                </p>
-              ) : (
-                bookings.map((booking) => (
-                  <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <strong>{booking.master.name}</strong>
-                      <span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-                        {booking.status}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
-                    <p className="mt-1 text-sm text-[var(--muted)]">{formatDate(booking.date)}</p>
-                    {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
+              <h2 className="text-xl font-semibold">Текущие записи</h2>
+              <div className="mt-4 grid gap-3">
+                {activeBookings.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">
+                    У вас пока нет активных записей. Откройте каталог на главной странице и запишитесь к мастеру.
+                  </p>
+                ) : (
+                  activeBookings.map((booking) => (
+                    <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <strong>{booking.master.name}</strong>
+                        <span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+                          {booking.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
+                      <p className="mt-1 text-sm text-[var(--muted)]">{formatDate(booking.date)}</p>
+                      {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-[var(--line)] bg-white/60 p-5">
+              <h2 className="text-xl font-semibold">История</h2>
+              <div className="mt-4 grid gap-3">
+                {historyBookings.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">Завершённые и отменённые записи появятся здесь.</p>
+                ) : (
+                  historyBookings.map((booking) => (
+                    <article key={booking.id} className="rounded-2xl bg-white/80 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <strong>{booking.master.name}</strong>
+                        <span className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+                          {booking.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-[var(--muted)]">{booking.service.name}</p>
+                      <p className="mt-1 text-sm text-[var(--muted)]">{formatDate(booking.date)}</p>
+                      {booking.notes ? <p className="mt-2 text-sm">{booking.notes}</p> : null}
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+          </div>
         )}
       </section>
     </main>
