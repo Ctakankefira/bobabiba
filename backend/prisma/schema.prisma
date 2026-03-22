@@ -29,11 +29,12 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  master     Master?
-  bookings   Booking[]
-  reviews    Review[]
-  favorites  Favorite[]
-  messages   Message[]
+  master        Master?
+  bookings      Booking[]
+  reviews       Review[]
+  favorites     Favorite[]
+  sentMessages  Message[] @relation("sentMessages")
+  receivedMessages Message[] @relation("receivedMessages")
 
   @@map("users")
 }
@@ -135,9 +136,9 @@ model Favorite {
 model Message {
   id         String   @id @default(cuid())
   senderId   String
-  sender     User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender     User     @relation("sentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiverId String
-  receiver   User     @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("receivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
   message    String
   createdAt  DateTime @default(now())
 
