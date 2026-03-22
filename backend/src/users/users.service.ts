@@ -52,6 +52,7 @@ export class UsersService {
     username?: string;
     displayName?: string;
     age?: number;
+    avatarUrl?: string;
     role?: 'CLIENT' | 'MASTER';
   }) {
     return this.prisma.user.create({
@@ -66,6 +67,7 @@ export class UsersService {
       username?: string;
       displayName?: string;
       age?: number;
+      avatarUrl?: string;
       role?: 'CLIENT' | 'MASTER';
     },
   ) {
@@ -110,5 +112,23 @@ export class UsersService {
       ...user,
       clientRatingAverage: clientRatingAggregate._avg.clientRating ?? 0,
     };
+  }
+
+  async updateRegistrationProfile(
+    id: string,
+    data: {
+      displayName?: string;
+      age?: number | null;
+      role?: 'CLIENT' | 'MASTER';
+      avatarUrl?: string | null;
+    },
+  ) {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      include: {
+        master: true,
+      },
+    });
   }
 }

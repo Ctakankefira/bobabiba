@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MastersModule } from './masters/masters.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BookingsModule } from './bookings/bookings.module';
     UsersModule,
     MastersModule,
     BookingsModule,
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [AppService],
