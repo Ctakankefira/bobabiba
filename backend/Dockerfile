@@ -7,6 +7,8 @@ RUN npm install --legacy-peer-deps --omit=dev
 
 COPY . .
 
+RUN npx prisma generate
+
 RUN npm run build
 
 EXPOSE 3000
