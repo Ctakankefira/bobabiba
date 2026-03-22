@@ -43,6 +43,11 @@ type Booking = {
     id: string;
     username?: string | null;
   };
+  review?: {
+    id: string;
+    rating: number;
+    comment?: string | null;
+  } | null;
 };
 
 type MasterProfile = {
@@ -131,6 +136,10 @@ export default function CabinetPage() {
   const [photosInput, setPhotosInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [ratingSavingId, setRatingSavingId] = useState<string | null>(null);
+  const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   const examples = useMemo(
     () => ({
@@ -156,6 +165,9 @@ export default function CabinetPage() {
   );
   const historyBookings = bookings.filter((booking) =>
     ["CANCELLED", "COMPLETED"].includes(booking.status),
+  );
+  const pendingClientReview = bookings.find(
+    (booking) => booking.status === "COMPLETED" && !booking.review,
   );
 
   useEffect(() => {
@@ -251,6 +263,14 @@ export default function CabinetPage() {
 
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (viewerProfile?.role === "CLIENT" && pendingClientReview && !reviewBookingId) {
+      setReviewBookingId(pendingClientReview.id);
+      setReviewRating(5);
+      setReviewComment("");
+    }
+  }, [pendingClientReview, reviewBookingId, viewerProfile?.role]);
 
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -365,6 +385,45 @@ export default function CabinetPage() {
     }
   }
 
+  async function submitMasterReview() {
+    if (!authToken || !reviewBookingId) return;
+
+    setReviewSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/bookings/${reviewBookingId}/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: reviewComment || undefined,
+        }),
+      });
+
+      const data = (await response.json()) as Booking & { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "Не удалось отправить отзыв");
+      }
+
+      setBookings((current) =>
+        current.map((booking) => (booking.id === reviewBookingId ? data : booking)),
+      );
+      setReviewBookingId(null);
+      setReviewComment("");
+      setReviewRating(5);
+      setMessage("Спасибо! Ваш отзыв сохранён и уже влияет на рейтинг мастера.");
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Не удалось отправить отзыв");
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6">
@@ -375,6 +434,56 @@ export default function CabinetPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6">
+      {viewerProfile?.role === "CLIENT" && reviewBookingId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
+          <section className="w-full max-w-2xl rounded-[32px] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-lg sm:p-8">
+            <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Отзыв</p>
+            <h2 className="mt-3 text-3xl font-semibold">Как прошла услуга?</h2>
+            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+              Поставьте оценку мастеру и при желании напишите отзыв. Он появится в профиле мастера.
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setReviewRating(value)}
+                  className={`rounded-full px-4 py-2 text-sm transition ${
+                    reviewRating === value
+                      ? "bg-[var(--accent)] text-white shadow-lg shadow-orange-200"
+                      : "border border-[var(--line)] bg-white/80"
+                  }`}
+                >
+                  {value} ★
+                </button>
+              ))}
+            </div>
+
+            <label className="mt-5 grid gap-2">
+              <span className="text-sm text-[var(--muted)]">Отзыв</span>
+              <textarea
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                className="min-h-28 rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
+                placeholder="Расскажите, что понравилось, чтобы другие клиенты лучше понимали стиль мастера."
+              />
+            </label>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={submitMasterReview}
+                disabled={reviewSaving}
+                className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition disabled:opacity-60"
+              >
+                {reviewSaving ? "Сохраняю отзыв..." : "Отправить отзыв"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       <section className="glass rounded-[32px] p-6 sm:p-8">
         <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Cabinet</p>
         <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">

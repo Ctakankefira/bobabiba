@@ -9,7 +9,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BookingsService } from './bookings.service';
 
@@ -46,6 +54,16 @@ class RateClientDto {
   comment?: string;
 }
 
+class CreateReviewDto {
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}
+
 @Controller('bookings')
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
@@ -73,5 +91,14 @@ export class BookingsController {
     @Body() body: RateClientDto,
   ) {
     return this.bookingsService.rateClient(req.user.userId, id, body.rating, body.comment);
+  }
+
+  @Post(':id/review')
+  reviewBooking(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: CreateReviewDto,
+  ) {
+    return this.bookingsService.createReview(req.user.userId, id, body.rating, body.comment);
   }
 }

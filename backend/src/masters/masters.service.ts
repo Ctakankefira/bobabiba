@@ -102,6 +102,14 @@ export class MastersService {
         reviews: {
           orderBy: { createdAt: 'desc' },
           take: 10,
+          include: {
+            client: true,
+            booking: {
+              include: {
+                service: true,
+              },
+            },
+          },
         },
       },
     });

@@ -85,31 +85,10 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [rolePickerOpen, setRolePickerOpen] = useState(false);
   const [roleSaving, setRoleSaving] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<{
-    hasTelegram: boolean;
-    hasWebApp: boolean;
-    initDataLength: number;
-  }>({
-    hasTelegram: false,
-    hasWebApp: false,
-    initDataLength: 0,
-  });
 
-  const [selectedMaster, setSelectedMaster] = useState<Master | null>(null);
-  const [selectedServiceId, setSelectedServiceId] = useState("");
-  const [bookingDate, setBookingDate] = useState("");
-  const [bookingNotes, setBookingNotes] = useState("");
-  const [bookingMessage, setBookingMessage] = useState<string | null>(null);
-  const [bookingError, setBookingError] = useState<string | null>(null);
-  const [bookingSaving, setBookingSaving] = useState(false);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
-    setDebugInfo({
-      hasTelegram: Boolean(window.Telegram),
-      hasWebApp: Boolean(webApp),
-      initDataLength: webApp?.initData?.length ?? 0,
-    });
     webApp?.ready();
     webApp?.expand();
 
@@ -281,61 +260,6 @@ export default function Home() {
     setRolePickerOpen(true);
   }
 
-  function openBooking(master: Master) {
-    setSelectedMaster(master);
-    setSelectedServiceId(master.services[0]?.id ?? "");
-    setBookingDate("");
-    setBookingNotes("");
-    setBookingMessage(null);
-    setBookingError(null);
-  }
-
-  async function submitBooking() {
-    if (!authToken || !selectedMaster || !selectedServiceId || !bookingDate) {
-      return;
-    }
-
-    const normalizedDate = new Date(bookingDate);
-    if (Number.isNaN(normalizedDate.getTime())) {
-      setBookingError("Укажите корректную дату и время");
-      return;
-    }
-
-    setBookingSaving(true);
-    setBookingMessage(null);
-    setBookingError(null);
-
-    try {
-      const response = await fetch("/api/bookings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          masterId: selectedMaster.id,
-          serviceId: selectedServiceId,
-          date: normalizedDate.toISOString(),
-          notes: bookingNotes || undefined,
-        }),
-      });
-
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(data.error || "Не удалось создать запись");
-      }
-
-      setBookingMessage("Запись создана. Проверь кабинет клиента для статуса.");
-      setTimeout(() => {
-        setSelectedMaster(null);
-      }, 1200);
-    } catch (submitError) {
-      setBookingError(submitError instanceof Error ? submitError.message : "Не удалось создать запись");
-    } finally {
-      setBookingSaving(false);
-    }
-  }
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-4 sm:px-6 sm:py-6">
       {rolePickerOpen ? (
@@ -369,86 +293,9 @@ export default function Home() {
         </div>
       ) : null}
 
-      {selectedMaster ? (
-        <section className="mb-6 rounded-[32px] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-lg">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Booking</p>
-              <h2 className="mt-3 text-2xl font-semibold">Запись к {selectedMaster.name}</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedMaster(null)}
-              className="rounded-full border border-[var(--line)] px-4 py-2 text-sm"
-            >
-              Закрыть
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2">
-              <span className="text-sm text-[var(--muted)]">Услуга</span>
-              <select
-                value={selectedServiceId}
-                onChange={(event) => setSelectedServiceId(event.target.value)}
-                className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
-              >
-                {selectedMaster.services.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name} • {service.price.toLocaleString("ru-RU")} ₽ • {service.duration} мин
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm text-[var(--muted)]">Дата и время</span>
-              <input
-                type="datetime-local"
-                value={bookingDate}
-                onChange={(event) => setBookingDate(event.target.value)}
-                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-                  .toISOString()
-                  .slice(0, 16)}
-                className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
-              />
-            </label>
-          </div>
-
-          <label className="mt-4 grid gap-2">
-            <span className="text-sm text-[var(--muted)]">Комментарий</span>
-            <textarea
-              value={bookingNotes}
-              onChange={(event) => setBookingNotes(event.target.value)}
-              className="min-h-24 rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none"
-              placeholder="Например: нужен утренний слот или есть пожелания по услуге."
-            />
-          </label>
-
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={submitBooking}
-              disabled={bookingSaving || !bookingDate || !selectedServiceId}
-              className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition disabled:opacity-60"
-            >
-              {bookingSaving ? "Создаю запись..." : "Записаться"}
-            </button>
-            {bookingMessage ? <p className="text-sm text-green-700">{bookingMessage}</p> : null}
-            {bookingError ? <p className="text-sm text-red-600">{bookingError}</p> : null}
-          </div>
-        </section>
-      ) : null}
-
       <section className="glass fade-up overflow-hidden rounded-[32px]">
         <div className="grid gap-8 px-5 py-6 sm:px-8 sm:py-8 lg:grid-cols-[1.35fr_0.9fr] lg:px-10">
           <div className="space-y-6">
-            <div className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/60 px-4 py-2 text-sm text-[var(--muted)]">
-              Telegram Mini App
-            </div>
-            <div className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/60 px-4 py-2 text-xs text-[var(--muted)]">
-              TG: {debugInfo.hasTelegram ? "yes" : "no"} • WebApp: {debugInfo.hasWebApp ? "yes" : "no"} • initData: {debugInfo.initDataLength}
-            </div>
             <div className="space-y-4">
               <p className="text-sm uppercase tracking-[0.28em] text-[var(--muted)]">
                 {viewerName}, подбор мастеров рядом
@@ -469,9 +316,9 @@ export default function Home() {
             <div className="flex flex-wrap gap-3">
               <a
                 href="/cabinet"
-                className="rounded-full bg-[var(--foreground)] px-5 py-3 text-sm font-medium text-white shadow-lg shadow-black/10 transition hover:opacity-90"
+                className="inline-flex min-w-[190px] items-center justify-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white shadow-lg shadow-orange-200 transition hover:opacity-90"
               >
-                {viewerProfile?.role === "MASTER" ? "Профиль мастера" : "Профиль клиента"}
+                {viewerProfile?.role === "MASTER" ? "Открыть профиль мастера" : "Открыть профиль клиента"}
               </a>
               {viewerProfile ? (
                 <button
@@ -594,15 +441,12 @@ export default function Home() {
                       </p>
                     )}
                   </div>
-                  {viewerProfile?.role === "CLIENT" && master.services.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => openBooking(master)}
-                      className="w-full rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                    >
-                      Записаться
-                    </button>
-                  ) : null}
+                  <a
+                    href={`/masters/${master.id}`}
+                    className="inline-flex w-full items-center justify-center rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                  >
+                    Открыть профиль
+                  </a>
                 </div>
               </article>
             ))}

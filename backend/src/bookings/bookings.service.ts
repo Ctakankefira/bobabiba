@@ -41,6 +41,7 @@ export class BookingsService {
         master: true,
         service: true,
         client: true,
+        review: true,
       },
     });
   }
@@ -64,6 +65,7 @@ export class BookingsService {
           client: true,
           service: true,
           master: true,
+          review: true,
         },
         orderBy: { date: 'desc' },
       });
@@ -77,6 +79,7 @@ export class BookingsService {
         client: true,
         service: true,
         master: true,
+        review: true,
       },
       orderBy: { date: 'desc' },
     });
@@ -115,6 +118,7 @@ export class BookingsService {
         client: true,
         service: true,
         master: true,
+        review: true,
       },
     });
   }
@@ -160,6 +164,77 @@ export class BookingsService {
         client: true,
         service: true,
         master: true,
+        review: true,
+      },
+    });
+  }
+
+  async createReview(
+    userId: string,
+    bookingId: string,
+    rating: number,
+    comment?: string,
+  ) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        review: true,
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.clientId !== userId) {
+      throw new ForbiddenException('Only the client can leave a review');
+    }
+
+    if (booking.status !== 'COMPLETED') {
+      throw new ForbiddenException('Review is available only after a completed booking');
+    }
+
+    if (booking.review) {
+      throw new ForbiddenException('Review for this booking already exists');
+    }
+
+    await this.prisma.review.create({
+      data: {
+        bookingId: booking.id,
+        clientId: booking.clientId,
+        masterId: booking.masterId,
+        rating,
+        comment,
+      },
+    });
+
+    const aggregate = await this.prisma.review.aggregate({
+      where: {
+        masterId: booking.masterId,
+      },
+      _avg: {
+        rating: true,
+      },
+    });
+
+    await this.prisma.master.update({
+      where: {
+        id: booking.masterId,
+      },
+      data: {
+        rating: aggregate._avg.rating ?? 0,
+      },
+    });
+
+    return this.prisma.booking.findUnique({
+      where: {
+        id: booking.id,
+      },
+      include: {
+        client: true,
+        service: true,
+        master: true,
+        review: true,
       },
     });
   }
