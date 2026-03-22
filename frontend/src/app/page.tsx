@@ -83,6 +83,15 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [rolePickerOpen, setRolePickerOpen] = useState(false);
   const [roleSaving, setRoleSaving] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<{
+    hasTelegram: boolean;
+    hasWebApp: boolean;
+    initDataLength: number;
+  }>({
+    hasTelegram: false,
+    hasWebApp: false,
+    initDataLength: 0,
+  });
 
   const [selectedMaster, setSelectedMaster] = useState<Master | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState("");
@@ -94,6 +103,11 @@ export default function Home() {
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
+    setDebugInfo({
+      hasTelegram: Boolean(window.Telegram),
+      hasWebApp: Boolean(webApp),
+      initDataLength: webApp?.initData?.length ?? 0,
+    });
     webApp?.ready();
     webApp?.expand();
 
@@ -405,6 +419,9 @@ export default function Home() {
           <div className="space-y-6">
             <div className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/60 px-4 py-2 text-sm text-[var(--muted)]">
               Telegram Mini App
+            </div>
+            <div className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/60 px-4 py-2 text-xs text-[var(--muted)]">
+              TG: {debugInfo.hasTelegram ? "yes" : "no"} • WebApp: {debugInfo.hasWebApp ? "yes" : "no"} • initData: {debugInfo.initDataLength}
             </div>
             <div className="space-y-4">
               <p className="text-sm uppercase tracking-[0.28em] text-[var(--muted)]">
