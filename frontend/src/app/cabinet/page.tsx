@@ -715,9 +715,11 @@ export default function CabinetPage() {
           <button type="button" onClick={() => { if (viewer) window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewer.id}`); window.location.href = "/?pickRole=1"; }} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
             Сменить роль
           </button>
-          <button type="button" onClick={() => setProfileEdit((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
-            {profileEdit ? "Скрыть личные данные" : "Изменить личные данные"}
-          </button>
+          {viewer?.role !== "MASTER" ? (
+            <button type="button" onClick={() => setProfileEdit((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
+              {profileEdit ? "Скрыть личные данные" : "Изменить личные данные"}
+            </button>
+          ) : null}
           {viewer?.role === "MASTER" ? (
             <button
               type="button"
@@ -735,7 +737,7 @@ export default function CabinetPage() {
         {message ? <p className="mt-4 text-sm text-green-700">{message}</p> : null}
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
-        {profileEdit ? (
+        {viewer?.role !== "MASTER" && profileEdit ? (
           <form className="mt-6 grid gap-4 rounded-[28px] border border-[var(--line)] bg-white/60 p-5" onSubmit={saveProfile}>
             <div className="grid gap-4 md:grid-cols-2">
               <input required value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Имя в приложении" className="rounded-2xl border border-[var(--line)] bg-white/80 px-4 py-3 outline-none" />
