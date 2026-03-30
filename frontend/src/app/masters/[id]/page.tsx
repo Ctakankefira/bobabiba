@@ -45,6 +45,10 @@ type Master = {
   reviews: Review[];
 };
 
+type ViewerProfile = {
+  role: "CLIENT" | "MASTER";
+};
+
 declare global {
   interface Window {
     Telegram?: {
@@ -87,6 +91,7 @@ export default function MasterProfilePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [viewerRole, setViewerRole] = useState<ViewerProfile["role"] | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [bookingDate, setBookingDate] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
@@ -124,6 +129,17 @@ export default function MasterProfilePage({
           if (authResponse.ok) {
             const authData = (await authResponse.json()) as { access_token: string };
             setAuthToken(authData.access_token);
+
+            const profileResponse = await fetch("/api/users/profile", {
+              headers: {
+                Authorization: `Bearer ${authData.access_token}`,
+              },
+            });
+
+            if (profileResponse.ok) {
+              const profileData = (await profileResponse.json()) as ViewerProfile;
+              setViewerRole(profileData.role);
+            }
           }
         }
       } catch (loadError) {
@@ -199,6 +215,8 @@ export default function MasterProfilePage({
       </main>
     );
   }
+
+  const canBook = Boolean(authToken) && viewerRole === "CLIENT";
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6">
@@ -284,7 +302,7 @@ export default function MasterProfilePage({
               <button
                 type="button"
                 onClick={submitBooking}
-                disabled={!authToken || bookingSaving || !selectedServiceId || !bookingDate}
+                disabled={!canBook || bookingSaving || !selectedServiceId || !bookingDate}
                 className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition disabled:opacity-60"
               >
                 {bookingSaving ? "Отправляю запись..." : "Записаться к мастеру"}
@@ -292,6 +310,11 @@ export default function MasterProfilePage({
 
               {!authToken ? (
                 <p className="text-sm text-[var(--muted)]">Откройте профиль внутри Telegram, чтобы записаться.</p>
+              ) : null}
+              {authToken && viewerRole === "MASTER" ? (
+                <p className="text-sm text-[var(--muted)]">
+                  Записываться на услуги может только клиент. Смените роль на клиента, если хотите оформить запись.
+                </p>
               ) : null}
               {bookingMessage ? <p className="text-sm text-green-700">{bookingMessage}</p> : null}
               {bookingError ? <p className="text-sm text-red-600">{bookingError}</p> : null}

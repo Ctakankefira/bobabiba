@@ -19,6 +19,18 @@ export class BookingsService {
   ) {}
 
   async create(userId: string, input: CreateBookingInput) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'CLIENT') {
+      throw new ForbiddenException('Only clients can book services');
+    }
+
     const master = await this.prisma.master.findUnique({
       where: { id: input.masterId },
       include: {
@@ -29,6 +41,10 @@ export class BookingsService {
 
     if (!master) {
       throw new NotFoundException('Master not found');
+    }
+
+    if (master.user?.id === userId) {
+      throw new ForbiddenException('Master cannot book own services');
     }
 
     const service = master.services.find((item) => item.id === input.serviceId);

@@ -716,8 +716,20 @@ export default function CabinetPage() {
             Сменить роль
           </button>
           <button type="button" onClick={() => setProfileEdit((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
-            {profileEdit ? "Скрыть личный профиль" : "Изменить личный профиль"}
+            {profileEdit ? "Скрыть личные данные" : "Изменить личные данные"}
           </button>
+          {viewer?.role === "MASTER" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMasterTab("overview");
+                setMasterEditing((current) => !current);
+              }}
+              className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm"
+            >
+              {masterEditing ? "Скрыть анкету мастера" : "Изменить анкету мастера"}
+            </button>
+          ) : null}
         </div>
 
         {message ? <p className="mt-4 text-sm text-green-700">{message}</p> : null}
@@ -746,7 +758,7 @@ export default function CabinetPage() {
             {masterTab === "overview" ? (
               <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
                 <section className="rounded-[28px] border border-[var(--line)] bg-white/65 p-5">
-                  <div className="flex items-start justify-between gap-4">
+                  <div>
                     <div>
                       <p className="text-sm uppercase tracking-[0.24em] text-[var(--muted)]">Профиль мастера</p>
                       <div className="mt-3 flex items-center gap-4">
@@ -764,9 +776,6 @@ export default function CabinetPage() {
                         <h2 className="text-2xl font-semibold">{master?.name || "Профиль мастера"}</h2>
                       </div>
                     </div>
-                    <button type="button" onClick={() => setMasterEditing((current) => !current)} className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm">
-                      {masterEditing ? "Скрыть редактирование" : "Изменить профиль"}
-                    </button>
                   </div>
 
                   {masterEditing ? (
