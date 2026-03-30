@@ -29,6 +29,7 @@ model User {
   displayName String?
   age        Int?
   avatarUrl  String?
+  isAdmin    Boolean  @default(false)
   role       Role     @default(CLIENT)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

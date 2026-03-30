@@ -78,6 +78,21 @@ export class TelegramService implements OnModuleInit {
     const telegramUser = message.from;
     const text = message.text?.trim();
     const session = this.sessions.get(chatId);
+    const adminCode = this.configService.get<string>('ADMIN_BOT_CODE')?.trim();
+
+    if (text && adminCode) {
+      const normalizedText = text.replace(/^\/admin\s*/i, '').trim();
+      if (normalizedText && normalizedText === adminCode) {
+        const user = await this.findOrCreateUser(telegramUser);
+        await this.usersService.setAdmin(user.id, true);
+        this.sessions.delete(chatId);
+        await this.sendMessage(
+          chatId,
+          'Админ-доступ активирован. В приложении теперь появится третий выбор: админ-панель.',
+        );
+        return;
+      }
+    }
 
     if (text?.startsWith('/')) {
       await this.handleCommand(chatId, telegramUser, text);

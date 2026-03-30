@@ -5,7 +5,15 @@ function normalizeUsername(value?: string | null) {
   return value?.trim().replace(/^@/, '').toLowerCase() ?? '';
 }
 
-function isAllowedAdmin(user: { username?: string | null; telegramId?: string | null }) {
+function isAllowedAdmin(user: {
+  isAdmin?: boolean;
+  username?: string | null;
+  telegramId?: string | null;
+}) {
+  if (user.isAdmin) {
+    return true;
+  }
+
   const adminUsername = normalizeUsername(process.env.ADMIN_USERNAME);
   const adminTelegramId = process.env.ADMIN_TELEGRAM_ID?.trim() ?? '';
 

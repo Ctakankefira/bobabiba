@@ -53,6 +53,7 @@ export class UsersService {
     displayName?: string;
     age?: number;
     avatarUrl?: string;
+    isAdmin?: boolean;
     role?: 'CLIENT' | 'MASTER';
   }) {
     return this.prisma.user.create({
@@ -68,6 +69,7 @@ export class UsersService {
       displayName?: string;
       age?: number;
       avatarUrl?: string;
+      isAdmin?: boolean;
       role?: 'CLIENT' | 'MASTER';
     },
   ) {
@@ -121,11 +123,22 @@ export class UsersService {
       age?: number | null;
       role?: 'CLIENT' | 'MASTER';
       avatarUrl?: string | null;
+      isAdmin?: boolean;
     },
   ) {
     return this.prisma.user.update({
       where: { id },
       data,
+      include: {
+        master: true,
+      },
+    });
+  }
+
+  async setAdmin(id: string, isAdmin: boolean) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { isAdmin },
       include: {
         master: true,
       },

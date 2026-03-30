@@ -31,6 +31,7 @@ type Master = {
 type ViewerProfile = {
   id: string;
   username?: string | null;
+  isAdmin?: boolean;
   role: "CLIENT" | "MASTER";
   master?: { id: string } | null;
 };
@@ -294,6 +295,14 @@ export default function Home() {
             >
               {roleSaving ? "Сохраняю..." : "Я мастер"}
             </button>
+            {isAdmin || viewerProfile?.isAdmin ? (
+              <a
+                href="/admin"
+                className="rounded-full border border-[var(--line)] bg-white/80 px-5 py-3 text-sm font-medium transition hover:bg-white"
+              >
+                РђРґРјРёРЅ-РїР°РЅРµР»СЊ
+              </a>
+            ) : null}
             </div>
           </section>
         </div>
