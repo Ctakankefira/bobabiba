@@ -291,6 +291,37 @@ export class TelegramService implements OnModuleInit {
     return `https://api.telegram.org/file/bot${botToken}/${filePath}`;
   }
 
+  async notifyMasterAboutBooking(input: {
+    telegramId: string;
+    masterName?: string | null;
+    clientName?: string | null;
+    serviceName?: string | null;
+    date: Date;
+    notes?: string | null;
+  }) {
+    if (!input.telegramId) {
+      return;
+    }
+
+    const chatId = Number(input.telegramId);
+    if (!Number.isFinite(chatId)) {
+      this.logger.warn(`Cannot send booking notification: invalid telegram id ${input.telegramId}`);
+      return;
+    }
+
+    const dateText = input.date.toLocaleString('ru-RU');
+    const lines = [
+      'Новая заявка',
+      input.masterName ? `Мастер: ${input.masterName}` : null,
+      input.clientName ? `Клиент: ${input.clientName}` : null,
+      input.serviceName ? `Услуга: ${input.serviceName}` : null,
+      `Дата: ${dateText}`,
+      input.notes ? `Комментарий: ${input.notes}` : null,
+    ].filter(Boolean);
+
+    await this.sendMessage(chatId, lines.join('\n'));
+  }
+
   private async sendMessage(
     chatId: number,
     text: string,

@@ -1,5 +1,6 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramService } from '../telegram/telegram.service';
 
 type CreateBookingInput = {
   masterId: string;
@@ -10,13 +11,19 @@ type CreateBookingInput = {
 
 @Injectable()
 export class BookingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(BookingsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly telegramService: TelegramService,
+  ) {}
 
   async create(userId: string, input: CreateBookingInput) {
     const master = await this.prisma.master.findUnique({
       where: { id: input.masterId },
       include: {
         services: true,
+        user: true,
       },
     });
 
@@ -29,7 +36,7 @@ export class BookingsService {
       throw new NotFoundException('Service not found');
     }
 
-    return this.prisma.booking.create({
+    const booking = await this.prisma.booking.create({
       data: {
         clientId: userId,
         masterId: master.id,
@@ -44,6 +51,31 @@ export class BookingsService {
         review: true,
       },
     });
+
+    if (master.user?.telegramId) {
+      const clientName =
+        booking.client?.displayName ??
+        booking.client?.username ??
+        booking.client?.telegramId ??
+        'Клиент';
+
+      try {
+        await this.telegramService.notifyMasterAboutBooking({
+          telegramId: master.user.telegramId,
+          masterName: master.name,
+          clientName,
+          serviceName: booking.service?.name ?? service.name,
+          date: booking.date,
+          notes: booking.notes ?? undefined,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send booking notification: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+
+    return booking;
   }
 
   async findMine(userId: string) {

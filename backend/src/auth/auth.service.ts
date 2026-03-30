@@ -76,6 +76,11 @@ export class AuthService {
 
     const telegramId = String(userData.id);
     const username = userData.username?.trim().toLowerCase() || undefined;
+    const displayName =
+      [userData.first_name, userData.last_name].filter(Boolean).join(' ').trim() ||
+      userData.first_name ||
+      username ||
+      undefined;
     let dbUser = await this.usersService.findByTelegramId(telegramId);
     if (!dbUser) {
       if (username) {
@@ -84,17 +89,28 @@ export class AuthService {
           dbUser = await this.usersService.updateIdentity(existingByUsername.id, {
             telegramId,
             username,
+            displayName,
           });
         }
       }
     }
 
     if (!dbUser) {
-      dbUser = await this.usersService.create({ telegramId, username, role: 'CLIENT' });
-    } else if (dbUser.username !== username || dbUser.telegramId !== telegramId) {
+      dbUser = await this.usersService.create({
+        telegramId,
+        username,
+        displayName,
+        role: 'CLIENT',
+      });
+    } else if (
+      dbUser.username !== username ||
+      dbUser.telegramId !== telegramId ||
+      dbUser.displayName !== displayName
+    ) {
       dbUser = await this.usersService.updateIdentity(dbUser.id, {
         telegramId,
         username,
+        displayName,
       });
     }
 
