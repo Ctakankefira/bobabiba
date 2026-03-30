@@ -54,8 +54,6 @@ declare global {
 
 const categories = ["Все", "Барберы", "Маникюр", "Брови", "Массаж", "Тату"];
 
-const ROLE_CHOICE_PREFIX = "role-choice:";
-
 function formatPrice(master: Master) {
   if (master.priceMin && master.priceMax) {
     return `${master.priceMin.toLocaleString("ru-RU")} - ${master.priceMax.toLocaleString("ru-RU")} ₽`;
@@ -90,6 +88,7 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [rolePickerOpen, setRolePickerOpen] = useState(false);
   const [roleSaving, setRoleSaving] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
 
   useEffect(() => {
@@ -145,17 +144,22 @@ export default function Home() {
         const profile = (await profileResponse.json()) as ViewerProfile;
         setViewerProfile(profile);
 
-        const roleChoiceKey = `${ROLE_CHOICE_PREFIX}${profile.id}`;
-        const hasRoleChoice = window.localStorage.getItem(roleChoiceKey);
-        const forceRolePicker = new URLSearchParams(window.location.search).get("pickRole") === "1";
-        if (!hasRoleChoice || forceRolePicker) {
-          setRolePickerOpen(true);
-        } else if (hasRoleChoice !== profile.role) {
-          window.localStorage.setItem(roleChoiceKey, profile.role);
+        setRolePickerOpen(true);
+
+        const adminResponse = await fetch("/api/admin/access", {
+          headers: {
+            Authorization: `Bearer ${authData.access_token}`,
+          },
+        });
+
+        if (adminResponse.ok) {
+          const adminData = (await adminResponse.json()) as { allowed?: boolean };
+          setIsAdmin(Boolean(adminData.allowed));
         }
       } catch {
         setAuthToken(null);
         setViewerProfile(null);
+        setIsAdmin(false);
       } finally {
         setAuthLoading(false);
       }
@@ -246,8 +250,6 @@ export default function Home() {
 
       const updatedProfile = (await response.json()) as ViewerProfile;
       setViewerProfile(updatedProfile);
-      window.localStorage.setItem(`${ROLE_CHOICE_PREFIX}${updatedProfile.id}`, role);
-      window.history.replaceState({}, "", "/");
       setRolePickerOpen(false);
     } catch {
       setError("Не удалось сохранить выбранную роль");
@@ -261,7 +263,6 @@ export default function Home() {
       return;
     }
 
-    window.localStorage.removeItem(`${ROLE_CHOICE_PREFIX}${viewerProfile.id}`);
     setRolePickerOpen(true);
   }
 
@@ -340,6 +341,14 @@ export default function Home() {
                   className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm transition hover:bg-white"
                 >
                   Заполнить анкету мастера
+                </a>
+              ) : null}
+              {isAdmin ? (
+                <a
+                  href="/admin"
+                  className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm transition hover:bg-white"
+                >
+                  Админ-панель
                 </a>
               ) : null}
               {categories.map((category) => {

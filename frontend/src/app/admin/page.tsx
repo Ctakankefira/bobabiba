@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type CreateMasterPayload = {
   username: string;
@@ -63,6 +63,9 @@ function parsePhotos(input: string): CreateMasterPayload["photos"] {
 }
 
 export default function AdminPage() {
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [accessAllowed, setAccessAllowed] = useState(false);
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -83,8 +86,59 @@ export default function AdminPage() {
     [],
   );
 
+  useEffect(() => {
+    const initData = (window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData;
+
+    async function bootstrap() {
+      if (!initData) {
+        setAuthLoading(false);
+        setError("Откройте админку внутри Telegram.");
+        return;
+      }
+
+      try {
+        const authResponse = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ initData }),
+        });
+
+        if (!authResponse.ok) {
+          throw new Error("Не удалось авторизоваться");
+        }
+
+        const authData = (await authResponse.json()) as { access_token: string };
+        setAuthToken(authData.access_token);
+
+        const accessResponse = await fetch("/api/admin/access", {
+          headers: {
+            Authorization: `Bearer ${authData.access_token}`,
+          },
+        });
+
+        const accessData = (await accessResponse.json()) as { allowed?: boolean; error?: string };
+        if (!accessResponse.ok || !accessData.allowed) {
+          throw new Error(accessData.error || "У вас нет доступа к админ-панели");
+        }
+
+        setAccessAllowed(true);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "Не удалось проверить доступ к админке");
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    bootstrap();
+  }, []);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!authToken || !accessAllowed) {
+      return;
+    }
     setLoading(true);
     setMessage(null);
     setError(null);
@@ -105,6 +159,7 @@ export default function AdminPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(payload),
       });
@@ -142,6 +197,15 @@ export default function AdminPage() {
           </p>
         </div>
 
+        {authLoading ? (
+          <div className="mt-8 rounded-2xl border border-[var(--line)] bg-white/80 p-6 text-sm text-[var(--muted)]">
+            Проверяю доступ к админ-панели...
+          </div>
+        ) : !accessAllowed ? (
+          <div className="mt-8 rounded-2xl border border-[var(--line)] bg-white/80 p-6 text-sm text-red-600">
+            {error || "У вас нет доступа к этой странице."}
+          </div>
+        ) : (
         <form className="mt-8 grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2">
@@ -251,6 +315,7 @@ export default function AdminPage() {
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </div>
         </form>
+        )}
       </section>
     </main>
   );
